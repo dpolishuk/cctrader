@@ -1,9 +1,9 @@
-"""Market sentiment analysis using Perplexity."""
+"""Market sentiment analysis using OpenWebSearch."""
 from typing import Any, Dict
 from claude_agent_sdk import tool
 
-# Note: Perplexity will be accessed via MCP in the agent configuration
-# These tools coordinate Perplexity queries
+# Note: OpenWebSearch will be accessed via MCP in the agent configuration
+# These tools coordinate web search queries
 
 @tool(
     name="analyze_market_sentiment",
@@ -15,15 +15,15 @@ from claude_agent_sdk import tool
 )
 async def analyze_market_sentiment(args: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Query Perplexity for market sentiment analysis.
+    Query OpenWebSearch for market sentiment analysis.
 
     Note: This tool provides a structured query that the agent will use
-    with the Perplexity MCP tool.
+    with the OpenWebSearch MCP tool.
     """
     symbol = args.get("symbol", "BTC")
     context = args.get("context", "")
 
-    # Create structured query for Perplexity
+    # Create structured query for web search
     query = f"""Analyze the current market sentiment for {symbol} cryptocurrency.
 Include:
 1. Recent major news events (last 24-48 hours)
@@ -37,10 +37,10 @@ Provide a concise summary with sentiment score if possible."""
     return {
         "content": [{
             "type": "text",
-            "text": f"Query Perplexity with: {query}\n\n"
-                    "The agent will use mcp__perplexity-mcp__perplexity_ask to get results."
+            "text": f"Query web search with: {query}\n\n"
+                    "The agent will use mcp__web-search__search to get results."
         }],
-        "perplexity_query": query,
+        "search_query": query,
         "symbol": symbol
     }
 
@@ -54,7 +54,7 @@ Provide a concise summary with sentiment score if possible."""
 )
 async def detect_market_events(args: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Use Perplexity to detect significant events affecting crypto markets.
+    Use OpenWebSearch to detect significant events affecting crypto markets.
     """
     symbols = args.get("symbols", ["BTC", "ETH"])
     lookback = args.get("lookback_hours", 24)
@@ -72,7 +72,7 @@ Prioritize events by potential price impact."""
     return {
         "content": [{
             "type": "text",
-            "text": f"Event detection query for Perplexity: {query}"
+            "text": f"Event detection query for web search: {query}"
         }],
-        "perplexity_query": query
+        "search_query": query
     }

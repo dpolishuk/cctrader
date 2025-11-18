@@ -15,7 +15,7 @@ class ScannerConfig:
     # Agent analysis
     min_confidence: int = field(default_factory=lambda: int(os.getenv('MIN_CONFIDENCE', '60')))
     agent_timeout_seconds: int = field(default_factory=lambda: int(os.getenv('AGENT_TIMEOUT', '120')))
-    max_perplexity_queries_per_cycle: int = 20
+    max_search_queries_per_cycle: int = 20
 
     # Position management
     monitoring_interval_seconds: int = field(default_factory=lambda: int(os.getenv('MONITORING_INTERVAL', '300')))

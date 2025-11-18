@@ -262,15 +262,84 @@ def scan_movers(interval, portfolio):
         exchange = get_exchange()
 
         # Create agent wrapper
-        from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+        from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server
         from agent.scanner.agent_wrapper import AgentWrapper
+        from agent.tools.market_data import fetch_market_data, get_current_price
+        from agent.tools.technical_analysis import analyze_technicals, multi_timeframe_analysis
+        from agent.tools.sentiment import analyze_market_sentiment, detect_market_events
+        from agent.scanner.tools import submit_trading_signal
+
+        # Create MCP server with all trading tools including submit_trading_signal
+        trading_tools_server = create_sdk_mcp_server(
+            name="trading_tools",
+            version="1.0.0",
+            tools=[
+                fetch_market_data,
+                get_current_price,
+                analyze_technicals,
+                multi_timeframe_analysis,
+                analyze_market_sentiment,
+                detect_market_events,
+                submit_trading_signal,  # Agent uses this to return structured analysis
+            ]
+        )
 
         agent_options = ClaudeAgentOptions(
-            max_turns=20,
-            max_budget_usd=1.0
+            # MCP servers
+            mcp_servers={
+                "trading": trading_tools_server,
+                # OpenWebSearch MCP is available via environment
+            },
+
+            # Allowed tools
+            allowed_tools=[
+                "mcp__trading__fetch_market_data",
+                "mcp__trading__get_current_price",
+                "mcp__trading__analyze_technicals",
+                "mcp__trading__multi_timeframe_analysis",
+                "mcp__trading__analyze_market_sentiment",
+                "mcp__trading__detect_market_events",
+                "mcp__trading__submit_trading_signal",
+                "mcp__web-search__search",
+            ],
+
+            # System prompt for scanner agent
+            system_prompt="""You are an expert cryptocurrency trading analysis agent for market movers scanning.
+
+Your mission: Analyze high-momentum market movers (5%+ moves) to identify high-probability trading opportunities.
+
+Analysis workflow:
+1. Gather multi-timeframe technical data (1m, 5m, 15m, 1h, 4h)
+2. Analyze market sentiment and detect catalysts using web search
+3. Evaluate liquidity and volume quality
+4. Assess BTC correlation
+5. Calculate 4-component confidence score:
+   - Technical alignment: 0-40 points
+   - Sentiment: 0-30 points
+   - Liquidity: 0-20 points
+   - BTC correlation: 0-10 points
+
+Scoring guidelines:
+- Only recommend trades with total confidence ≥ 60
+- Be conservative - high confidence requires strong alignment across ALL factors
+- Technical: aligned signals across multiple timeframes
+- Sentiment: clear catalysts, positive news flow, no major risks
+- Liquidity: sufficient volume, tight spreads, no manipulation signs
+- Correlation: favorable BTC relationship for the trade direction
+
+CRITICAL: Call submit_trading_signal() as your FINAL step with all analysis results.
+This is REQUIRED - your analysis is not complete until you call this tool.""",
+
+            # Model and limits
+            model="claude-sonnet-4-5",
+            max_turns=10,
+            max_budget_usd=0.50,  # Conservative per-analysis budget
+
+            # Streaming
+            include_partial_messages=True,
         )
-        claude_client = ClaudeSDKClient(options=agent_options)
-        agent = AgentWrapper(claude_client)
+
+        agent = AgentWrapper(agent_options)
 
         # Create and start scanner
         scanner = MarketMoversScanner(

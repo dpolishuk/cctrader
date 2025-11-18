@@ -7,7 +7,8 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     AssistantMessage,
     TextBlock,
-    ToolUseBlock
+    ToolUseBlock,
+    ToolResultBlock
 )
 from .tools import set_signal_queue, clear_signal_queue
 
@@ -118,6 +119,10 @@ class AgentWrapper:
 
         try:
             async for message in client.receive_response():
+                # Log raw message type for debugging
+                message_type = type(message).__name__
+                logger.debug(f"📬 Received message type: {message_type}")
+
                 if isinstance(message, AssistantMessage):
                     message_count += 1
 
@@ -133,30 +138,28 @@ class AgentWrapper:
                             f"📨 Message #{message_count}: {len(tools_in_message)} tool(s) - "
                             f"{', '.join(tools_in_message)}"
                         )
+                    else:
+                        logger.info(f"📨 Message #{message_count}: text only (no tools)")
 
                     # Process blocks for detailed logging
                     for block in message.content:
                         if isinstance(block, TextBlock):
-                            # Log agent reasoning (INFO level so we can see it)
-                            logger.info(f"Agent text: {block.text[:200]}...")
+                            # Log full agent reasoning
+                            text = block.text
+                            if len(text) > 500:
+                                logger.info(f"💭 Agent reasoning:\n{text[:500]}...\n[{len(text)-500} more chars]")
+                            else:
+                                logger.info(f"💭 Agent reasoning:\n{text}")
                         elif isinstance(block, ToolUseBlock):
                             # Track tool call frequency
                             tool_key = f"{block.name}"
                             tool_call_count[tool_key] = tool_call_count.get(tool_key, 0) + 1
 
-                            # Log tool usage with parameters
-                            params_summary = ""
+                            # Log tool usage with full parameters
+                            params_str = ""
                             if hasattr(block, 'input') and block.input:
-                                # Show key parameters
-                                key_params = []
-                                if 'symbol' in block.input:
-                                    key_params.append(f"symbol={block.input['symbol']}")
-                                if 'timeframe' in block.input:
-                                    key_params.append(f"timeframe={block.input['timeframe']}")
-                                if 'limit' in block.input:
-                                    key_params.append(f"limit={block.input['limit']}")
-                                if key_params:
-                                    params_summary = f" ({', '.join(key_params)})"
+                                import json
+                                params_str = json.dumps(block.input, indent=2)
 
                             # Warn on duplicate calls
                             duplicate_marker = ""
@@ -164,8 +167,33 @@ class AgentWrapper:
                                 duplicate_marker = f" ⚠️  DUPLICATE #{tool_call_count[tool_key]}"
 
                             logger.info(
-                                f"🔧 Tool call: {block.name}{params_summary}{duplicate_marker}"
+                                f"🔧 Tool call: {block.name}{duplicate_marker}\n"
+                                f"   Parameters: {params_str}"
                             )
+                        elif isinstance(block, ToolResultBlock):
+                            # Log tool results
+                            tool_id = block.tool_use_id
+                            is_error = block.is_error if hasattr(block, 'is_error') else False
+                            content = block.content if hasattr(block, 'content') else str(block)
+
+                            if is_error:
+                                logger.error(f"❌ Tool error (ID: {tool_id}):\n{content}")
+                            else:
+                                # Truncate long results
+                                content_str = str(content)
+                                if len(content_str) > 300:
+                                    logger.info(f"✅ Tool result (ID: {tool_id}):\n{content_str[:300]}...\n[{len(content_str)-300} more chars]")
+                                else:
+                                    logger.info(f"✅ Tool result (ID: {tool_id}):\n{content_str}")
+                        else:
+                            # Log unknown block types
+                            logger.debug(f"🔍 Unknown block type: {type(block).__name__}")
+
+                else:
+                    # Log all non-AssistantMessage types for debugging
+                    logger.info(f"📦 Non-assistant message: {message_type}")
+                    if hasattr(message, '__dict__'):
+                        logger.debug(f"   Content: {message.__dict__}")
 
             # Log summary at end
             if tool_call_count:

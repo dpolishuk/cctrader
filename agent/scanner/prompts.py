@@ -42,7 +42,7 @@ Context:
 
 Your task:
 1. Gather multi-timeframe technical analysis (1m, 5m, 15m, 1h, 4h)
-2. Analyze market sentiment and detect catalysts using Perplexity
+2. Analyze market sentiment and detect catalysts using web search
 3. Check liquidity and volume quality
 4. Assess correlation with BTC
 5. Calculate confidence score (0-100):
@@ -96,7 +96,7 @@ Position details:
 - Time in position: {duration} minutes
 
 Check:
-1. Has market sentiment changed? (query Perplexity)
+1. Has market sentiment changed? (query web search)
 2. Are technicals still aligned?
 3. Any new events or catalysts?
 4. Is momentum weakening?

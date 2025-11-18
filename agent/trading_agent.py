@@ -94,10 +94,10 @@ class TradingAgent:
             # MCP servers
             mcp_servers={
                 "trading": trading_tools_server,
-                # Perplexity MCP is available via the environment
+                # OpenWebSearch MCP is available via the environment
             },
 
-            # Allowed tools (trading tools + Perplexity)
+            # Allowed tools (trading tools + OpenWebSearch)
             allowed_tools=[
                 "mcp__trading__fetch_market_data",
                 "mcp__trading__get_current_price",
@@ -108,8 +108,7 @@ class TradingAgent:
                 "mcp__trading__generate_trading_signal",
                 "mcp__trading__update_portfolio",
                 "mcp__trading__calculate_pnl",
-                "mcp__perplexity-mcp__perplexity_ask",
-                "mcp__perplexity-mcp__perplexity_reason",
+                "mcp__web-search__search",
             ] + (
                 [
                     "mcp__trading__create_paper_portfolio",
@@ -129,7 +128,7 @@ class TradingAgent:
 Your responsibilities:
 1. Fetch market data across multiple timeframes: {', '.join(self.timeframes)}
 2. Perform comprehensive technical analysis (RSI, MACD, Bollinger Bands)
-3. Analyze market sentiment using Perplexity for news and events
+3. Analyze market sentiment using web search for news and events
 4. Generate trading signals (BUY/SELL/HOLD) with confidence scores
 5. Monitor portfolio positions and calculate P&L
 6. Store all analysis and signals in the database
@@ -144,7 +143,7 @@ Always:
 When analyzing:
 1. First fetch current price and recent OHLCV data
 2. Run technical analysis on each timeframe
-3. Query Perplexity for market sentiment and news
+3. Query web search for market sentiment and news
 4. Combine all data to generate trading signal
 5. Save signal to database
 6. If position exists, calculate and report P&L
@@ -177,7 +176,7 @@ When analyzing:
 
 1. Fetch current price and latest OHLCV data for timeframes: {', '.join(self.timeframes[:3])}
 2. Run technical analysis on each timeframe
-3. Use Perplexity to analyze current market sentiment and detect any significant events
+3. Use web search to analyze current market sentiment and detect any significant events
 4. Generate a trading signal based on all the analysis
 5. Save the signal to the database
 6. If there's an open position, calculate current P&L
