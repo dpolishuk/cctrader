@@ -261,13 +261,16 @@ def scan_movers(interval, portfolio):
         # Initialize exchange
         exchange = get_exchange()
 
-        # Create agent (simple initialization without full TradingAgent)
+        # Create agent wrapper
         from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+        from agent.scanner.agent_wrapper import AgentWrapper
+
         agent_options = ClaudeAgentOptions(
             max_turns=20,
             max_budget_usd=1.0
         )
-        agent = ClaudeSDKClient(options=agent_options)
+        claude_client = ClaudeSDKClient(options=agent_options)
+        agent = AgentWrapper(claude_client)
 
         # Create and start scanner
         scanner = MarketMoversScanner(

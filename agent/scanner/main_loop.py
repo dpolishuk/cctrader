@@ -351,15 +351,20 @@ class MarketMoversScanner:
         if hasattr(exposure_pct, '__await__'):
             exposure_pct = await exposure_pct
 
-        await self.db.save_movers_metrics(
-            timestamp=cycle_start,
-            movers_found=movers_found,
-            movers_analyzed=movers_analyzed,
-            signals_generated=signals_generated,
-            trades_executed=trades_executed,
-            trades_rejected=trades_rejected,
-            cycle_duration_seconds=cycle_duration,
-            portfolio_value=portfolio_value,
-            open_positions=open_positions,
-            exposure_pct=exposure_pct
-        )
+        # Build metrics dict
+        metrics = {
+            'cycle_duration_seconds': cycle_duration,
+            'movers_found': movers_found,
+            'signals_generated': signals_generated,
+            'signals_executed': trades_executed,
+            'signals_rejected': trades_rejected,
+            'open_positions': open_positions,
+            'total_exposure_pct': exposure_pct,
+            'portfolio_value': portfolio_value,
+            # These would come from portfolio risk metrics:
+            'daily_pnl_pct': 0.0,  # TODO: Get from portfolio
+            'weekly_pnl_pct': 0.0,  # TODO: Get from portfolio
+            'risk_level': 'LOW'  # TODO: Calculate based on exposure/pnl
+        }
+
+        await self.db.save_movers_metrics(metrics)
