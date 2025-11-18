@@ -5,6 +5,7 @@ from .symbol_manager import FuturesSymbolManager
 from .momentum_scanner import MomentumScanner
 from .confidence import ConfidenceCalculator
 from .risk_validator import RiskValidator
+from .prompts import PromptBuilder
 
 __all__ = [
     'ScannerConfig',
@@ -14,4 +15,5 @@ __all__ = [
     'MomentumScanner',
     'ConfidenceCalculator',
     'RiskValidator',
+    'PromptBuilder',
 ]
