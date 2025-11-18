@@ -98,7 +98,8 @@ class MarketMoversScanner:
         trades_rejected = 0
 
         # Step 1: Scan for movers
-        movers = await self.momentum_scanner.scan_all_symbols()
+        symbols_list = list(self.symbol_manager.get_symbols().keys())
+        movers = await self.momentum_scanner.scan_all_symbols(symbols_list)
         gainers_count = len(movers.get('gainers', []))
         losers_count = len(movers.get('losers', []))
         logger.info(f"📈 Found {gainers_count} gainers, {losers_count} losers")
