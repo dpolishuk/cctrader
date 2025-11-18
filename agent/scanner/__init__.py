@@ -6,6 +6,7 @@ from .momentum_scanner import MomentumScanner
 from .confidence import ConfidenceCalculator
 from .risk_validator import RiskValidator
 from .prompts import PromptBuilder
+from .main_loop import MarketMoversScanner
 
 __all__ = [
     'ScannerConfig',
@@ -16,4 +17,5 @@ __all__ = [
     'ConfidenceCalculator',
     'RiskValidator',
     'PromptBuilder',
+    'MarketMoversScanner',
 ]
