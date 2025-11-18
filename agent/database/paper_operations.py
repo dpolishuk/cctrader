@@ -430,3 +430,117 @@ class PaperTradingDatabase:
             )
             await db.commit()
             return cursor.lastrowid
+
+    # Market Movers Strategy
+
+    async def save_mover_signal(
+        self,
+        symbol: str,
+        direction: str,
+        confidence: int,
+        entry_price: float,
+        stop_loss: float,
+        tp1: float,
+        position_size_usd: float,
+        risk_amount_usd: float,
+        technical_score: float = None,
+        sentiment_score: float = None,
+        liquidity_score: float = None,
+        correlation_score: float = None,
+        analysis: Dict = None
+    ) -> int:
+        """Save a mover signal to database."""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO movers_signals
+                (symbol, direction, confidence, entry_price, stop_loss, tp1,
+                 position_size_usd, risk_amount_usd, technical_score, sentiment_score,
+                 liquidity_score, correlation_score, analysis)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (symbol, direction, confidence, entry_price, stop_loss, tp1,
+                 position_size_usd, risk_amount_usd, technical_score, sentiment_score,
+                 liquidity_score, correlation_score, json.dumps(analysis) if analysis else None)
+            )
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_mover_signal(self, signal_id: int) -> Optional[Dict]:
+        """Get mover signal by ID."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM movers_signals WHERE id = ?",
+                (signal_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    result = dict(row)
+                    if result.get('analysis'):
+                        result['analysis'] = json.loads(result['analysis'])
+                    return result
+                return None
+
+    async def save_mover_rejection(
+        self,
+        symbol: str,
+        direction: str,
+        confidence: int,
+        reason: str,
+        details: Dict = None
+    ) -> int:
+        """Save a mover rejection to database."""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO movers_rejections
+                (symbol, direction, confidence, reason, details)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (symbol, direction, confidence, reason, json.dumps(details) if details else None)
+            )
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_recent_rejections(self, limit: int = 10) -> List[Dict]:
+        """Get recent rejections."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM movers_rejections ORDER BY timestamp DESC LIMIT ?",
+                (limit,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+                results = []
+                for row in rows:
+                    result = dict(row)
+                    if result.get('details'):
+                        result['details'] = json.loads(result['details'])
+                    results.append(result)
+                return results
+
+    async def save_movers_metrics(self, metrics: Dict) -> int:
+        """Save movers scan cycle metrics."""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO movers_metrics
+                (cycle_duration_seconds, movers_found, signals_generated,
+                 signals_executed, signals_rejected, open_positions,
+                 total_exposure_pct, daily_pnl_pct, weekly_pnl_pct, risk_level)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (metrics.get('cycle_duration_seconds'),
+                 metrics.get('movers_found'),
+                 metrics.get('signals_generated'),
+                 metrics.get('signals_executed'),
+                 metrics.get('signals_rejected'),
+                 metrics.get('open_positions'),
+                 metrics.get('total_exposure_pct'),
+                 metrics.get('daily_pnl_pct'),
+                 metrics.get('weekly_pnl_pct'),
+                 metrics.get('risk_level'))
+            )
+            await db.commit()
+            return cursor.lastrowid
