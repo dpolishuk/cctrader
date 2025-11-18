@@ -2,5 +2,12 @@
 from .config import ScannerConfig
 from .risk_config import RiskConfig, ConfidenceTier
 from .symbol_manager import FuturesSymbolManager
+from .momentum_scanner import MomentumScanner
 
-__all__ = ['ScannerConfig', 'RiskConfig', 'ConfidenceTier', 'FuturesSymbolManager']
+__all__ = [
+    'ScannerConfig',
+    'RiskConfig',
+    'ConfidenceTier',
+    'FuturesSymbolManager',
+    'MomentumScanner',
+]
