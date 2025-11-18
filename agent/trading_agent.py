@@ -13,47 +13,80 @@ from claude_agent_sdk import (
 )
 
 # Import all tools
-from tools.market_data import fetch_market_data, get_current_price
-from tools.technical_analysis import analyze_technicals, multi_timeframe_analysis
-from tools.sentiment import analyze_market_sentiment, detect_market_events
-from tools.signals import generate_trading_signal
-from tools.portfolio import update_portfolio, calculate_pnl
-from database.schema import init_database
-from database.operations import TradingDatabase
+from .tools.market_data import fetch_market_data, get_current_price
+from .tools.technical_analysis import analyze_technicals, multi_timeframe_analysis
+from .tools.sentiment import analyze_market_sentiment, detect_market_events
+from .tools.signals import generate_trading_signal
+from .tools.portfolio import update_portfolio, calculate_pnl
+from .tools.paper_trading_tools import (
+    create_paper_portfolio,
+    execute_paper_trade,
+    get_paper_portfolio_status,
+    update_paper_positions,
+    reset_circuit_breaker
+)
+from .database.schema import init_database
+from .database.operations import TradingDatabase
 
 load_dotenv()
 
 class TradingAgent:
-    def __init__(self, symbol: str = "BTC/USDT", timeframes: list = None):
+    def __init__(self, symbol: str = "BTC/USDT", timeframes: list = None, paper_trading: bool = False, paper_portfolio: str = "default"):
         self.symbol = symbol
         self.timeframes = timeframes or ["1m", "5m", "15m", "1h", "4h", "1d"]
         self.db_path = Path(os.getenv("DB_PATH", "./trading_data.db"))
         self.db = TradingDatabase(self.db_path)
         self.running = False
+        self.paper_trading = paper_trading
+        self.paper_portfolio = paper_portfolio
+        self.paper_manager = None  # Will be initialized in initialize()
 
     async def initialize(self):
         """Initialize database and agent."""
         await init_database(self.db_path)
+
+        if self.paper_trading:
+            from agent.database.paper_schema import init_paper_trading_db
+            from agent.paper_trading.portfolio_manager import PaperPortfolioManager
+
+            await init_paper_trading_db(self.db_path)
+            self.paper_manager = PaperPortfolioManager(self.db_path, self.paper_portfolio)
+            await self.paper_manager.initialize()
+
+            print(f"✅ Paper trading mode enabled - Portfolio: {self.paper_portfolio}")
+
         print(f"✅ Database initialized at {self.db_path}")
 
     def create_agent_options(self) -> ClaudeAgentOptions:
         """Create Claude Agent SDK configuration."""
 
         # Create SDK MCP server with all trading tools
+        tools_list = [
+            fetch_market_data,
+            get_current_price,
+            analyze_technicals,
+            multi_timeframe_analysis,
+            analyze_market_sentiment,
+            detect_market_events,
+            generate_trading_signal,
+            update_portfolio,
+            calculate_pnl
+        ]
+
+        # Add paper trading tools if in paper mode
+        if self.paper_trading:
+            tools_list.extend([
+                create_paper_portfolio,
+                execute_paper_trade,
+                get_paper_portfolio_status,
+                update_paper_positions,
+                reset_circuit_breaker
+            ])
+
         trading_tools_server = create_sdk_mcp_server(
             name="trading_tools",
             version="1.0.0",
-            tools=[
-                fetch_market_data,
-                get_current_price,
-                analyze_technicals,
-                multi_timeframe_analysis,
-                analyze_market_sentiment,
-                detect_market_events,
-                generate_trading_signal,
-                update_portfolio,
-                calculate_pnl
-            ]
+            tools=tools_list
         )
 
         # Configure options
@@ -77,10 +110,21 @@ class TradingAgent:
                 "mcp__trading__calculate_pnl",
                 "mcp__perplexity-mcp__perplexity_ask",
                 "mcp__perplexity-mcp__perplexity_reason",
-            ],
+            ] + (
+                [
+                    "mcp__trading__create_paper_portfolio",
+                    "mcp__trading__execute_paper_trade",
+                    "mcp__trading__get_paper_portfolio_status",
+                    "mcp__trading__update_paper_positions",
+                    "mcp__trading__reset_circuit_breaker"
+                ] if self.paper_trading else []
+            ),
 
             # System prompt
             system_prompt=f"""You are an expert cryptocurrency trading analysis agent monitoring {self.symbol} on Bybit.
+
+{'[PAPER TRADING MODE] All trades are simulated.' if self.paper_trading else ''}
+{f'Portfolio: {self.paper_portfolio}' if self.paper_trading else ''}
 
 Your responsibilities:
 1. Fetch market data across multiple timeframes: {', '.join(self.timeframes)}
@@ -104,7 +148,14 @@ When analyzing:
 4. Combine all data to generate trading signal
 5. Save signal to database
 6. If position exists, calculate and report P&L
-""",
+
+{'''Paper Trading Specific:
+- Execute all signals via execute_paper_trade tool
+- Monitor portfolio status with get_paper_portfolio_status
+- Update positions regularly with update_paper_positions
+- Respect circuit breaker status
+- Provide audit reports on request
+''' if self.paper_trading else ''}""",
 
             # Model
             model="claude-sonnet-4-5",
