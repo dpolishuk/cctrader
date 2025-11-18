@@ -55,7 +55,16 @@ Your task:
 
 Use your tools systematically. Think step-by-step. Show reasoning.
 
+EFFICIENCY GUIDELINES:
+- Call tools in PARALLEL when possible (multiple independent fetch_market_data calls in one message)
+- DO NOT call the same tool multiple times with identical parameters
+- Use multi_timeframe_analysis when available instead of individual fetches
+- Verify symbol format once (e.g., try "XANUSDT" not "XAN") before making multiple calls
+
 IMPORTANT: Only recommend trades with confidence ≥ 60. Be conservative.
+
+FINAL STEP: Call submit_trading_signal() with your complete analysis.
+This is REQUIRED - include all 10 parameters (confidence, prices, scores, symbol, analysis).
 """
         return prompt
 

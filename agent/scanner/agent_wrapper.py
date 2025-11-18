@@ -1,41 +1,199 @@
 """Wrapper for Claude Agent to provide scanner-compatible interface."""
 from typing import Dict, Any
+import asyncio
 import logging
+from claude_agent_sdk import (
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
+    AssistantMessage,
+    TextBlock,
+    ToolUseBlock
+)
+from .tools import set_signal_queue, clear_signal_queue
 
 logger = logging.getLogger(__name__)
 
 class AgentWrapper:
     """Wraps Claude Agent SDK to provide scanner-compatible interface."""
 
-    def __init__(self, claude_agent):
+    def __init__(self, agent_options: ClaudeAgentOptions):
         """
         Initialize wrapper.
 
         Args:
-            claude_agent: ClaudeSDKClient instance
+            agent_options: ClaudeAgentOptions with tools, system prompt, etc.
         """
-        self.claude_agent = claude_agent
+        self.agent_options = agent_options
 
     async def run(self, prompt: str) -> Dict[str, Any]:
         """
         Run analysis and return structured response.
 
-        For now, this returns mock/heuristic-based analysis since proper
-        Claude Agent integration requires parsing natural language responses.
+        Uses Claude Agent SDK with tool-based output pattern:
+        1. Creates signal queue for communication
+        2. Sets queue in context for submit_trading_signal tool
+        3. Sends prompt to agent via ClaudeSDKClient
+        4. Waits for agent to call submit_trading_signal (max 45s)
+        5. Returns signal dict or confidence=0 on timeout/error
 
         Args:
             prompt: Analysis prompt
 
         Returns:
-            Dict with confidence, entry_price, stop_loss, tp1, etc.
+            Dict with confidence, entry_price, stop_loss, tp1, scoring components, analysis
         """
-        # TODO: Implement full Claude Agent integration with prompt parsing
-        # For now, return low confidence to skip agent-based trading
+        # Create queue for signal communication
+        signal_queue = asyncio.Queue()
 
-        logger.warning("Using stub agent analysis - full Claude Agent integration pending")
+        # Set queue in module-level storage so submit_trading_signal tool can access it
+        set_signal_queue(signal_queue)
 
+        try:
+            # Create agent client with configured options
+            async with ClaudeSDKClient(options=self.agent_options) as client:
+                logger.info("Starting agent analysis")
+
+                # Send analysis prompt
+                await client.query(prompt)
+
+                # Process agent messages (log for debugging)
+                message_task = asyncio.create_task(
+                    self._process_messages(client)
+                )
+
+                # Wait for signal with 45-second timeout
+                try:
+                    signal = await asyncio.wait_for(
+                        signal_queue.get(),
+                        timeout=45.0
+                    )
+
+                    logger.info(
+                        f"Agent analysis complete: confidence={signal['confidence']}, "
+                        f"symbol={signal['symbol']}"
+                    )
+
+                    # Cancel message processing task
+                    message_task.cancel()
+                    try:
+                        await message_task
+                    except asyncio.CancelledError:
+                        pass
+
+                    return signal
+
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "Agent analysis timeout after 45 seconds - "
+                        "agent did not call submit_trading_signal"
+                    )
+
+                    # Cancel message processing
+                    message_task.cancel()
+                    try:
+                        await message_task
+                    except asyncio.CancelledError:
+                        pass
+
+                    return self._timeout_response()
+
+        except Exception as e:
+            logger.error(f"Error in agent analysis: {e}", exc_info=True)
+            return self._error_response(str(e))
+
+        finally:
+            # Clear module-level queue
+            clear_signal_queue()
+
+    async def _process_messages(self, client: ClaudeSDKClient):
+        """
+        Process messages from agent for logging/debugging.
+
+        Args:
+            client: ClaudeSDKClient instance
+        """
+        # Track tool calls to detect duplicates
+        tool_call_count = {}
+        message_count = 0
+
+        try:
+            async for message in client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    message_count += 1
+
+                    # Count tools in this message
+                    tools_in_message = []
+                    for block in message.content:
+                        if isinstance(block, ToolUseBlock):
+                            tools_in_message.append(block.name)
+
+                    # Log message summary
+                    if tools_in_message:
+                        logger.info(
+                            f"📨 Message #{message_count}: {len(tools_in_message)} tool(s) - "
+                            f"{', '.join(tools_in_message)}"
+                        )
+
+                    # Process blocks for detailed logging
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            # Log agent reasoning (INFO level so we can see it)
+                            logger.info(f"Agent text: {block.text[:200]}...")
+                        elif isinstance(block, ToolUseBlock):
+                            # Track tool call frequency
+                            tool_key = f"{block.name}"
+                            tool_call_count[tool_key] = tool_call_count.get(tool_key, 0) + 1
+
+                            # Log tool usage with parameters
+                            params_summary = ""
+                            if hasattr(block, 'input') and block.input:
+                                # Show key parameters
+                                key_params = []
+                                if 'symbol' in block.input:
+                                    key_params.append(f"symbol={block.input['symbol']}")
+                                if 'timeframe' in block.input:
+                                    key_params.append(f"timeframe={block.input['timeframe']}")
+                                if 'limit' in block.input:
+                                    key_params.append(f"limit={block.input['limit']}")
+                                if key_params:
+                                    params_summary = f" ({', '.join(key_params)})"
+
+                            # Warn on duplicate calls
+                            duplicate_marker = ""
+                            if tool_call_count[tool_key] > 1:
+                                duplicate_marker = f" ⚠️  DUPLICATE #{tool_call_count[tool_key]}"
+
+                            logger.info(
+                                f"🔧 Tool call: {block.name}{params_summary}{duplicate_marker}"
+                            )
+
+            # Log summary at end
+            if tool_call_count:
+                logger.info(
+                    f"📊 Tool call summary: {sum(tool_call_count.values())} total calls, "
+                    f"{len(tool_call_count)} unique tools"
+                )
+                for tool, count in sorted(tool_call_count.items(), key=lambda x: -x[1]):
+                    if count > 1:
+                        logger.warning(f"   ⚠️  {tool}: {count} calls (duplicates detected)")
+                    else:
+                        logger.info(f"   ✓ {tool}: {count} call")
+
+        except asyncio.CancelledError:
+            # Expected when analysis completes or times out
+            pass
+        except Exception as e:
+            logger.error(f"Error processing agent messages: {e}", exc_info=True)
+
+    def _timeout_response(self) -> Dict[str, Any]:
+        """
+        Build response for timeout case.
+
+        Returns:
+            Dict with confidence=0 and timeout message
+        """
         return {
-            'confidence': 45,  # Below 60 threshold - will be rejected
+            'confidence': 0,
             'entry_price': None,
             'stop_loss': None,
             'tp1': None,
@@ -43,5 +201,27 @@ class AgentWrapper:
             'sentiment_score': 0.0,
             'liquidity_score': 0.0,
             'correlation_score': 0.0,
-            'analysis': 'Agent analysis pending - full integration in progress'
+            'analysis': 'Analysis timeout - exceeded 45 second limit'
+        }
+
+    def _error_response(self, error_msg: str) -> Dict[str, Any]:
+        """
+        Build response for error case.
+
+        Args:
+            error_msg: Error message to include
+
+        Returns:
+            Dict with confidence=0 and error message
+        """
+        return {
+            'confidence': 0,
+            'entry_price': None,
+            'stop_loss': None,
+            'tp1': None,
+            'technical_score': 0.0,
+            'sentiment_score': 0.0,
+            'liquidity_score': 0.0,
+            'correlation_score': 0.0,
+            'analysis': f'Analysis error: {error_msg}'
         }
