@@ -1,5 +1,6 @@
 # tests/test_symbol_manager.py
 import pytest
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from agent.scanner.symbol_manager import FuturesSymbolManager
 
@@ -75,3 +76,19 @@ async def test_get_symbols_returns_cached():
 
     assert len(symbols) == 2
     mock_exchange.load_markets.assert_not_called()
+
+def test_should_refresh_logic():
+    """Test should_refresh method returns correct refresh status."""
+    mock_exchange = MagicMock()
+    manager = FuturesSymbolManager(mock_exchange)
+
+    # Test 1: Returns True when never refreshed (last_refresh is None)
+    assert manager.should_refresh() is True
+
+    # Test 2: Returns False immediately after refresh
+    manager.last_refresh = datetime.now()
+    assert manager.should_refresh(refresh_interval_minutes=60) is False
+
+    # Test 3: Returns True after interval expires
+    manager.last_refresh = datetime.now() - timedelta(minutes=61)
+    assert manager.should_refresh(refresh_interval_minutes=60) is True
