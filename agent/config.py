@@ -1,6 +1,6 @@
 """Configuration management."""
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 from dotenv import load_dotenv
 
@@ -18,7 +18,7 @@ class Config:
     DEFAULT_SYMBOL: str = os.getenv("DEFAULT_SYMBOL", "BTC/USDT")
 
     # Timeframes
-    TIMEFRAMES: List[str] = ["1m", "5m", "15m", "1h", "4h", "1d"]
+    TIMEFRAMES: List[str] = field(default_factory=lambda: ["1m", "5m", "15m", "1h", "4h", "1d"])
 
     # Database
     DB_PATH: str = os.getenv("DB_PATH", "./trading_data.db")

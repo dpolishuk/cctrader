@@ -5,6 +5,7 @@ from rich.console import Console
 from rich.table import Table
 from dotenv import load_dotenv
 import os
+import logging
 
 from .trading_agent import TradingAgent
 from .database.operations import TradingDatabase
@@ -12,6 +13,7 @@ from pathlib import Path
 
 load_dotenv()
 console = Console()
+logger = logging.getLogger(__name__)
 
 @click.group()
 def cli():
@@ -200,6 +202,96 @@ def reset_breaker(portfolio):
         console.print(f"[green]✅ Circuit breaker reset for portfolio '{portfolio}'[/green]")
 
     asyncio.run(run())
+
+@cli.command()
+@click.option('--interval', default=300, help='Scan interval in seconds')
+@click.option('--portfolio', default='Market Movers', help='Paper trading portfolio name')
+def scan_movers(interval, portfolio):
+    """Run market movers scanner - detects and analyzes 5%+ movers."""
+    async def run_scanner():
+        from agent.tools.market_data import get_exchange
+        from agent.paper_trading.portfolio_manager import PaperPortfolioManager
+        from agent.database.paper_operations import PaperTradingDatabase
+        from agent.database.paper_schema import init_paper_trading_db
+        from agent.database.movers_schema import create_movers_tables
+        from agent.scanner.main_loop import MarketMoversScanner
+        from agent.config import config
+        import aiosqlite
+
+        # Setup logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+
+        console.print("[bold green]🚀 Starting Market Movers Scanner[/bold green]")
+        console.print(f"Scan interval: {interval}s")
+        console.print(f"Portfolio: {portfolio}")
+
+        # Initialize database
+        db_path = Path(config.DB_PATH)
+        await init_paper_trading_db(db_path)
+
+        # Create movers tables
+        async with aiosqlite.connect(db_path) as conn:
+            await create_movers_tables(conn)
+            await conn.commit()
+
+        db = PaperTradingDatabase(db_path)
+
+        # Get or create portfolio
+        portfolio_data = await db.get_portfolio_by_name(portfolio)
+
+        if not portfolio_data:
+            console.print(f"[yellow]Creating new portfolio '{portfolio}'...[/yellow]")
+            portfolio_id = await db.create_portfolio(
+                name=portfolio,
+                starting_capital=10000.0,
+                execution_mode='realistic'
+            )
+            console.print(f"[green]✅ Portfolio created (ID: {portfolio_id})[/green]")
+        else:
+            portfolio_id = portfolio_data['id']
+            console.print(f"[green]✅ Using existing portfolio (ID: {portfolio_id})[/green]")
+
+        # Initialize portfolio manager
+        manager = PaperPortfolioManager(db_path, portfolio)
+        await manager.initialize()
+
+        # Initialize exchange
+        exchange = get_exchange()
+
+        # Create agent (simple initialization without full TradingAgent)
+        from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+        agent_options = ClaudeAgentOptions(
+            max_turns=20,
+            max_budget_usd=1.0
+        )
+        agent = ClaudeSDKClient(options=agent_options)
+
+        # Create and start scanner
+        scanner = MarketMoversScanner(
+            exchange=exchange,
+            agent=agent,
+            portfolio=manager,
+            db=db
+        )
+
+        scanner.config.scan_interval_seconds = interval
+
+        console.print("[bold cyan]Scanner initialized. Press Ctrl+C to stop.[/bold cyan]")
+
+        try:
+            await scanner.start()
+        except KeyboardInterrupt:
+            scanner.stop()
+            console.print("\n[yellow]Scanner stopped by user[/yellow]")
+
+    try:
+        asyncio.run(run_scanner())
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        logger.error(f"Scanner error: {e}", exc_info=True)
 
 if __name__ == '__main__':
     cli()
