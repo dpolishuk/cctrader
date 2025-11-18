@@ -25,6 +25,9 @@ class RiskConfig:
     # Correlation limits
     max_correlated_positions: int = 2
 
+    # Minimum confidence threshold for trading
+    min_confidence: int = 60
+
     # Stop-loss parameters
     min_stop_distance_pct: float = 2.0
     max_stop_distance_pct: float = 5.0
