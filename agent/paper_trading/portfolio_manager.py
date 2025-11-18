@@ -356,6 +356,47 @@ class PaperPortfolioManager:
 
         await self.db.update_portfolio_equity(self.portfolio_id, new_equity)
 
+    def get_total_value(self) -> float:
+        """
+        Get current total portfolio value.
+
+        Returns:
+            Current equity value
+        """
+        if not self.portfolio:
+            return 0.0
+        return self.portfolio.get('current_equity', 0.0)
+
+    async def count_open_positions(self) -> int:
+        """
+        Count number of open positions.
+
+        Returns:
+            Number of open positions
+        """
+        positions = await self.db.get_open_positions(self.portfolio_id)
+        return len(positions)
+
+    async def calculate_exposure_pct(self) -> float:
+        """
+        Calculate current portfolio exposure percentage.
+
+        Returns:
+            Exposure as percentage of equity
+        """
+        positions = await self.db.get_open_positions(self.portfolio_id)
+
+        total_exposure = sum(
+            pos['quantity'] * pos['current_price']
+            for pos in positions
+        )
+
+        current_equity = self.get_total_value()
+        if current_equity <= 0:
+            return 0.0
+
+        return (total_exposure / current_equity) * 100
+
     async def get_portfolio_summary(self) -> Dict[str, Any]:
         """Get comprehensive portfolio summary."""
         portfolio = await self.db.get_portfolio(self.portfolio_id)
