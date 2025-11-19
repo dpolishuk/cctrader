@@ -1,233 +1,137 @@
-Bundled Tools Integration Test Results
-========================================
+BUNDLED TOOLS INTEGRATION TEST - V2 (POST-FIX)
+==============================================
+Date: 2025-11-19 13:49-13:52 UTC
+Test Duration: 3 minutes (timeout enforced)
+Scanner Interval: 60 seconds
+Command: python -m agent.main scan-movers --interval 60
 
-Date: 2025-11-19
-Test Duration: 3 minutes (180 seconds)
-Test Command: python -m agent.main scan-movers --interval 60
+CONFIGURATION FIX APPLIED:
+- Removed individual tools (get_current_price, fetch_market_data, etc.) from MCP server registration
+- Only bundled tools exposed to agent: fetch_technical_snapshot, fetch_sentiment_data, submit_trading_signal
 
-OVERALL VERDICT: FAILURE ❌
-===========================
+TEST RESULTS:
+=============
 
-The bundled tools implementation DID NOT fix the scanner timeout issue.
-Agent still calls individual tools despite allowed_tools configuration.
+VERDICT: ❌ PARTIAL SUCCESS - STILL HAS ISSUES
 
-TEST SUMMARY
-============
+ANALYSIS #1: TNSR/USDT (LONG) +36.47%
+--------------------------------------
+Start: 13:50:24.549
+Timeout: 13:51:09.552
+Duration: 45.0s (HIT TIMEOUT)
 
-Total Analysis Cycles: 3
-- Cycle 1 (TNSR/USDT LONG): FAILED - Timeout after 45s
-- Cycle 2 (JELLYJELLY/USDT SHORT): FAILED - Timeout after 45s (signal submitted but too late)
-- Cycle 3 (AKE/USDT SHORT): COMPLETED (but with extra tool calls)
+Message Pattern:
+  📨 Message #1: text only (reasoning)
+  📨 Message #2: fetch_technical_snapshot ✅
+  📨 Message #3: fetch_sentiment_data ✅
+  📨 Message #4: text only (reasoning)
+  📨 Message #5: fetch_technical_snapshot ⚠️  DUPLICATE #2
+  📨 Message #6: text only (reasoning)
+  📨 Message #7: submit_trading_signal ✅ (but after 45s timeout)
+  📨 Message #8: text only (final)
 
-Success Rate: 1/3 (33%) - Was 0%, minimal improvement
-Timeout Count: 2 out of 3 cycles
-Average Analysis Time: ~45 seconds (target was <30s)
+Tool Calls: 4 total (3 unique tools, 1 duplicate)
+  - fetch_technical_snapshot: 2 calls (DUPLICATE!)
+  - fetch_sentiment_data: 1 call
+  - submit_trading_signal: 1 call
 
-
-TOOL CALL PATTERN ANALYSIS
-===========================
-
-Expected Pattern (3 calls):
-✅ Message #2: fetch_technical_snapshot
-✅ Message #3: fetch_sentiment_data
-✅ Message #4: submit_trading_signal
-
-Actual Pattern (5-6 calls per cycle):
-✅ Message #2: fetch_technical_snapshot (correct)
-✅ Message #3: fetch_sentiment_data (correct)
-❌ Message #5: get_current_price (SHOULD NOT BE CALLED)
-❌ Message #6: fetch_market_data (SHOULD NOT BE CALLED)
-❌ Message #7: fetch_market_data or multi_timeframe_analysis (SHOULD NOT BE CALLED)
-✅ Message #8-9: submit_trading_signal (correct but too late)
-
-Total disallowed tool calls: 8 across 3 cycles
+Result: ⚠️ TIMEOUT - submitted signal but exceeded 45s limit
 
 
-DETAILED CYCLE BREAKDOWN
-=========================
+ANALYSIS #2: JELLYJELLY/USDT (SHORT) -15.79%
+---------------------------------------------
+Start: 13:51:12.928
+Timeout: 13:51:57.931
+Duration: 45.0s (HIT TIMEOUT)
 
-Cycle 1: TNSR/USDT (LONG) +22.59%
------------------------------------
-Start: 13:43:01.720
-End: 13:43:46.723 (TIMEOUT)
-Duration: 45.0 seconds
+Message Pattern:
+  📨 Message #1: text only (reasoning)
+  📨 Message #2: fetch_technical_snapshot ✅
+  📨 Message #3: fetch_sentiment_data ✅
+  📨 Message #4: text only (reasoning)
+  📨 Message #5: submit_trading_signal ✅
+  📨 Message #6: text only (final)
 
-Tool Calls:
-1. fetch_technical_snapshot ✅
-2. fetch_sentiment_data ✅
-3. get_current_price ❌ (disallowed tool called!)
-4. fetch_market_data ❌ (disallowed tool called!)
-5. multi_timeframe_analysis ❌ (disallowed tool called!)
+Tool Calls: 3 total (3 unique tools)
+  - fetch_technical_snapshot: 1 call
+  - fetch_sentiment_data: 1 call
+  - submit_trading_signal: 1 call
 
-Result: TIMEOUT - submit_trading_signal NEVER CALLED
-
-
-Cycle 2: JELLYJELLY/USDT (SHORT) -14.29%
-------------------------------------------
-Start: 13:43:49.945
-End: 13:44:34.949 (TIMEOUT)
-Duration: 45.0 seconds
-
-Tool Calls:
-1. fetch_technical_snapshot ✅
-2. fetch_sentiment_data ✅
-3. get_current_price ❌ (disallowed tool called!)
-4. fetch_market_data ❌ (disallowed tool called!)
-5. fetch_market_data (duplicate) ❌ (disallowed tool called!)
-6. submit_trading_signal ✅ (but after timeout threshold)
-
-Result: TIMEOUT WARNING - Signal submitted but analysis took too long
+Result: ⚠️ TIMEOUT - submitted signal but exceeded 45s limit
 
 
-Cycle 3: AKE/USDT (SHORT) -6.40%
-----------------------------------
-Start: 13:44:38.416
-End: ~13:44:59.445
-Duration: ~21 seconds
-
-Tool Calls:
-1. fetch_technical_snapshot ✅
-2. fetch_sentiment_data ✅
-3. get_current_price ❌ (disallowed tool called!)
-4. fetch_market_data ❌ (disallowed tool called!)
-5. submit_trading_signal ✅
-
-Result: SUCCESS - Completed analysis with confidence=0 (rejected trade)
+SCAN CYCLE STATS:
+-----------------
+Total Cycle Time: 127.8s
+Symbols Monitored: 134 futures pairs
+Movers Found: 1 gainer, 1 loser
+Signals Generated: 0 (both below confidence threshold)
+Trades Executed: 0
 
 
-SUCCESS INDICATORS (from plan)
-===============================
-✅ "Agent analysis complete: confidence=..." - YES (1 out of 3)
-❌ "📨 Message #1: 1 tool(s) - fetch_technical_snapshot" - YES but followed by disallowed calls
-❌ "📨 Message #2: 1 tool(s) - fetch_sentiment_data" - YES but followed by disallowed calls
-❌ "📨 Message #3: 1 tool(s) - submit_trading_signal" - NO (was message #6-9)
-❌ Analysis time < 30 seconds - NO (2 timeouts at 45s, 1 success at 21s)
-
-
-FAILURE INDICATORS (from plan)
-===============================
-✅ "Agent analysis timeout after 45 seconds" - YES (2 timeouts)
-✅ More than 3 messages with tools - YES (5-6 tool calls per cycle)
-❌ Agent calling web-search directly - NO (not observed, bundled correctly)
-
-
-CRITICAL ISSUES DISCOVERED
-===========================
-
-1. **ALLOWED_TOOLS NOT ENFORCED**
-   The agent successfully called disallowed tools 8 times:
-   - mcp__trading__get_current_price (3 calls)
-   - mcp__trading__fetch_market_data (4 calls)
-   - mcp__trading__multi_timeframe_analysis (1 call)
-
-   These tools are NOT in the allowed_tools list but were still callable.
-
-2. **AGENT DOESN'T TRUST BUNDLED DATA**
-   After calling bundled tools, agent makes additional individual calls
-   to "verify" or "get more detail". This defeats the entire purpose.
-
-3. **SEQUENTIAL EXECUTION PERSISTS**
-   Agent still executes tools sequentially with reasoning between each call.
-   Bundled tools did reduce some calls but agent adds them back.
-
-4. **ROOT CAUSE**
-   The Claude Agent SDK's allowed_tools configuration appears to:
-   - Not block tools that are registered in MCP servers
-   - Or has different enforcement semantics than expected
-   - Tools registered in MCP server are available regardless of allowed_tools
-
-
-CONFIGURATION AUDIT
+SUCCESS INDICATORS:
 ===================
-
-allowed_tools list (agent/main.py:300-305):
-  - mcp__trading__fetch_technical_snapshot ✅
-  - mcp__trading__fetch_sentiment_data ✅
-  - mcp__trading__submit_trading_signal ✅
-  - mcp__web-search__search ✅
-
-MCP server tools list (agent/main.py:276-289):
-  - fetch_technical_snapshot ✅ (bundled)
-  - fetch_sentiment_data ✅ (bundled)
-  - submit_trading_signal ✅
-  - fetch_market_data ❌ (should NOT be registered)
-  - get_current_price ❌ (should NOT be registered)
-  - analyze_technicals ❌ (should NOT be registered)
-  - multi_timeframe_analysis ❌ (should NOT be registered)
-  - analyze_market_sentiment ❌ (should NOT be registered)
-  - detect_market_events ❌ (should NOT be registered)
-
-The comment says "Keep individual tools for other agents" but scanner
-is the only agent using this MCP server. These tools must be removed.
+✅ NO individual tool calls (get_current_price, etc.)
+✅ Agent only uses bundled tools
+✅ Tool call pattern is mostly correct (3-4 messages)
+⚠️  Analysis #1 had duplicate fetch_technical_snapshot call
+⚠️  Analysis #2 was cleaner (3 unique tools only)
+❌ Both analyses hit 45s timeout
+❌ Analysis time: 45s (target: <30s)
+❌ Agent still taking too long to complete
 
 
-LOG EXCERPTS
-============
+ROOT CAUSE ANALYSIS:
+====================
+1. Fix WORKED: Individual tools successfully removed from agent visibility
+2. NEW ISSUE: Agent is still slow (45s per analysis)
+3. Duplicate calls: Analysis #1 called fetch_technical_snapshot twice
+4. The timeout is masking actual completion time
 
-Timeout Example (Cycle 1):
-2025-11-19 13:43:01,720 - agent.scanner.agent_wrapper - INFO - Starting agent analysis
-2025-11-19 13:43:07,228 - agent.scanner.agent_wrapper - INFO - 📨 Message #2: 1 tool(s) - mcp__trading__fetch_technical_snapshot
-2025-11-19 13:43:07,242 - agent.scanner.agent_wrapper - INFO - 📨 Message #3: 1 tool(s) - mcp__trading__fetch_sentiment_data
-2025-11-19 13:43:11,946 - agent.scanner.agent_wrapper - INFO - 📨 Message #5: 1 tool(s) - mcp__trading__get_current_price
-2025-11-19 13:43:11,959 - agent.scanner.agent_wrapper - INFO - 📨 Message #6: 1 tool(s) - mcp__trading__fetch_market_data
-2025-11-19 13:43:14,593 - agent.scanner.agent_wrapper - INFO - 📨 Message #8: 1 tool(s) - mcp__trading__multi_timeframe_analysis
-2025-11-19 13:43:46,723 - agent.scanner.agent_wrapper - WARNING - Agent analysis timeout after 45 seconds
+The configuration fix successfully removed individual tools, but the agent
+is still hitting the 45-second timeout. This suggests the slowness is NOT
+from the tool calls themselves, but from the agent's reasoning/processing
+between tool calls.
 
-Disallowed Tool Call Example:
-2025-11-19 13:43:11,947 - agent.scanner.agent_wrapper - INFO - 🔧 Tool call: mcp__trading__get_current_price
-   Parameters: {
-  "symbol": "TNSRUSDT"
-}
-
-Success Example (Cycle 3):
-2025-11-19 13:44:38,416 - agent.scanner.agent_wrapper - INFO - Starting agent analysis
-2025-11-19 13:44:41,663 - agent.scanner.agent_wrapper - INFO - 📨 Message #2: 1 tool(s) - mcp__trading__fetch_technical_snapshot
-2025-11-19 13:44:41,674 - agent.scanner.agent_wrapper - INFO - 📨 Message #3: 1 tool(s) - mcp__trading__fetch_sentiment_data
-2025-11-19 13:44:54,283 - agent.scanner.agent_wrapper - INFO - 📨 Message #7: 1 tool(s) - mcp__trading__submit_trading_signal
-2025-11-19 13:44:59,445 - agent.scanner.agent_wrapper - INFO - 📊 Tool call summary: 5 total calls, 5 unique tools
-
-
-RECOMMENDATIONS
-===============
-
-IMMEDIATE ACTIONS REQUIRED:
-
-1. Remove individual tools from MCP server registration
-   The tools list in create_sdk_mcp_server() should ONLY include:
-   - fetch_technical_snapshot
-   - fetch_sentiment_data
-   - submit_trading_signal
-
-   Remove: fetch_market_data, get_current_price, analyze_technicals,
-           multi_timeframe_analysis, analyze_market_sentiment, detect_market_events
-
-2. Test if allowed_tools enforcement works when tools aren't registered
-   This will reveal if the issue is:
-   - Tool availability (registered = available regardless of allowed_tools)
-   - Configuration precedence (MCP server overrides allowed_tools)
-
-3. Enhance system prompt to FORBID individual tool calls
-   Add explicit instruction:
-   "You MUST NOT call get_current_price or fetch_market_data individually.
-    All technical data is in fetch_technical_snapshot."
 
 NEXT STEPS:
+===========
+1. ✅ Configuration fix successful - individual tools removed
+2. ❌ Need to address agent processing speed (45s is too slow)
+3. ⚠️  Investigate why Analysis #1 duplicated fetch_technical_snapshot
+4. Consider:
+   - Increase timeout to 60s to see actual completion time
+   - Add streaming/intermediate results
+   - Optimize agent prompt to reduce reasoning time
+   - Monitor token usage (high tokens = slow processing)
 
-If removing tools from MCP server doesn't work:
-- Investigate Claude Agent SDK documentation for allowed_tools semantics
-- Consider creating a separate MCP server for scanner vs other agents
-- File bug report with Anthropic if allowed_tools is not enforced
+
+COMPARISON TO V1 (PRE-FIX):
+===========================
+V1 Issues:
+  - Agent called individual tools AFTER bundled tools
+  - Tool call pattern was chaotic (10+ messages)
+  - Mixed bundled and individual tool usage
+
+V2 Improvements:
+  - ✅ Individual tools completely removed
+  - ✅ Tool call pattern cleaner (3-4 messages)
+  - ✅ Only bundled tools used
+
+V2 Remaining Issues:
+  - ❌ Still hitting timeout (45s)
+  - ⚠️  Occasional duplicate calls
+  - Analysis speed not improved
 
 
-CONCLUSION
-==========
+RAW LOG SAMPLE:
+===============
+2025-11-19 13:50:28,190 - agent.scanner.agent_wrapper - INFO - 📨 Message #1: text only (no tools)
+2025-11-19 13:50:28,200 - agent.scanner.agent_wrapper - INFO - 📨 Message #2: 1 tool(s) - mcp__trading__fetch_technical_snapshot
+2025-11-19 13:50:28,210 - agent.scanner.agent_wrapper - INFO - 📨 Message #3: 1 tool(s) - mcp__trading__fetch_sentiment_data
+2025-11-19 13:50:32,680 - agent.scanner.agent_wrapper - INFO - 📨 Message #4: text only (no tools)
+2025-11-19 13:50:32,691 - agent.scanner.agent_wrapper - INFO - 📨 Message #5: 1 tool(s) - mcp__trading__fetch_technical_snapshot ⚠️  DUPLICATE #2
+2025-11-19 13:50:42,508 - agent.scanner.agent_wrapper - INFO - 📨 Message #7: 1 tool(s) - mcp__trading__submit_trading_signal
+2025-11-19 13:51:09,552 - agent.scanner.agent_wrapper - WARNING - Agent analysis timeout after 45 seconds
 
-The bundled tools approach showed promise but FAILED due to:
-1. Configuration bug: Individual tools still available to agent
-2. Agent behavior: Makes extra calls even when bundled data available
-3. SDK limitation: allowed_tools may not restrict registered MCP tools
-
-The implementation is incomplete. Task 8 decision: KEEP with fixes required.
-Do NOT proceed to Task 9 until individual tools are removed from MCP server.
-
-Test must be re-run after fixing MCP server tool registration.
+Full log: /tmp/bundled_tools_test_v2.log
