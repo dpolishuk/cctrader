@@ -98,6 +98,30 @@ async def test_get_hourly_usage(token_db):
 
 
 @pytest.mark.asyncio
+async def test_get_daily_usage(token_db):
+    """Test getting daily usage statistics."""
+    session_id = await token_db.create_session("test")
+
+    # Record 5 token usages
+    for i in range(5):
+        await token_db.record_token_usage(
+            session_id=session_id,
+            operation_type="analysis",
+            model="claude-sonnet-4-5",
+            tokens_input=1000,
+            tokens_output=500,
+            cost_usd=0.0105,
+            duration_seconds=2.0
+        )
+
+    stats = await token_db.get_daily_usage()
+
+    assert stats['request_count'] == 5
+    assert stats['total_tokens'] == 7500  # (1000 + 500) * 5
+    assert abs(stats['total_cost_usd'] - 0.0525) < 1e-10  # 0.0105 * 5
+
+
+@pytest.mark.asyncio
 async def test_end_session(token_db):
     """Test ending a session."""
     session_id = await token_db.create_session("test")
