@@ -36,7 +36,7 @@ Required API keys in `.env`:
 
 3. **Initialize database:**
 ```bash
-python -m agent.main analyze --symbol BTC/USDT
+python -m src.agent.main analyze --symbol BTC/USDT
 ```
 
 ## Usage
@@ -44,30 +44,30 @@ python -m agent.main analyze --symbol BTC/USDT
 ### Continuous Monitoring
 Start continuous market monitoring with automatic analysis at regular intervals:
 ```bash
-python -m agent.main monitor --symbol BTC/USDT --interval 300
+python -m src.agent.main monitor --symbol BTC/USDT --interval 300
 ```
 
 ### Single Analysis
 Run a one-time market analysis:
 ```bash
-python -m agent.main analyze --symbol BTC/USDT
+python -m src.agent.main analyze --symbol BTC/USDT
 ```
 
 Custom query:
 ```bash
-python -m agent.main analyze --symbol ETH/USDT "What is the current market sentiment for Ethereum?"
+python -m src.agent.main analyze --symbol ETH/USDT "What is the current market sentiment for Ethereum?"
 ```
 
 ### View Signals
 Display recent trading signals from the database:
 ```bash
-python -m agent.main signals --symbol BTC/USDT --limit 10
+python -m src.agent.main signals --symbol BTC/USDT --limit 10
 ```
 
 ### Portfolio Status
 Check current portfolio position:
 ```bash
-python -m agent.main status --symbol BTC/USDT
+python -m src.agent.main status --symbol BTC/USDT
 ```
 
 ## Architecture
