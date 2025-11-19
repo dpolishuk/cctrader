@@ -365,5 +365,89 @@ This is REQUIRED - your analysis is not complete until you call this tool.""",
         console.print(f"[red]Error: {e}[/red]")
         logger.error(f"Scanner error: {e}", exc_info=True)
 
+@cli.command()
+@click.option('--period', type=click.Choice(['hourly', 'daily', 'session']), default='daily')
+@click.option('--session-id', default=None, help='Specific session ID')
+def token_stats(period, session_id):
+    """View token usage statistics."""
+    async def run():
+        db_path = Path(os.getenv("DB_PATH", "./trading_data.db"))
+
+        from agent.database.token_operations import TokenDatabase
+        from agent.tracking.display import TokenDisplay
+
+        token_db = TokenDatabase(db_path)
+        display = TokenDisplay()
+
+        if session_id:
+            # Show specific session
+            session = await token_db.get_session(session_id)
+            if not session:
+                console.print(f"[yellow]Session {session_id} not found[/yellow]")
+                return
+
+            display.display_stats_table(session)
+        elif period == 'hourly':
+            stats = await token_db.get_hourly_usage()
+            console.print("[bold]Last Hour Usage[/bold]")
+            display.display_stats_table(stats)
+        elif period == 'daily':
+            stats = await token_db.get_daily_usage()
+            console.print("[bold]Last 24 Hours Usage[/bold]")
+            display.display_stats_table(stats)
+
+    asyncio.run(run())
+
+
+@cli.command()
+def token_limits():
+    """Show rate limit status."""
+    async def run():
+        db_path = Path(os.getenv("DB_PATH", "./trading_data.db"))
+
+        from agent.database.token_operations import TokenDatabase
+        from agent.tracking.display import TokenDisplay
+        from agent.config import config
+
+        token_db = TokenDatabase(db_path)
+        display = TokenDisplay()
+
+        hourly_usage = await token_db.get_hourly_usage()
+        daily_usage = await token_db.get_daily_usage()
+
+        rate_limits = {
+            'hourly': {
+                'request_count': hourly_usage['request_count'],
+                'limit': config.CLAUDE_HOURLY_LIMIT,
+                'percentage': (hourly_usage['request_count'] / config.CLAUDE_HOURLY_LIMIT) * 100
+            },
+            'daily': {
+                'request_count': daily_usage['request_count'],
+                'limit': config.CLAUDE_DAILY_LIMIT,
+                'percentage': (daily_usage['request_count'] / config.CLAUDE_DAILY_LIMIT) * 100
+            }
+        }
+
+        table = Table(title="Claude Code Rate Limit Status")
+        table.add_column("Period", style="cyan")
+        table.add_column("Usage", style="yellow")
+        table.add_column("Limit", style="blue")
+        table.add_column("Percentage", style="magenta")
+
+        for period_name, period_data in rate_limits.items():
+            pct = period_data['percentage']
+            color = "red" if pct >= 80 else "yellow" if pct >= 50 else "green"
+
+            table.add_row(
+                period_name.capitalize(),
+                f"{period_data['request_count']:,}",
+                f"{period_data['limit']:,}",
+                f"[{color}]{pct:.1f}%[/{color}]"
+            )
+
+        display.console.print(table)
+
+    asyncio.run(run())
+
 if __name__ == '__main__':
     cli()
