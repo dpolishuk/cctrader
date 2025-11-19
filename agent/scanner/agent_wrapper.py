@@ -62,11 +62,12 @@ class AgentWrapper:
                     self._process_messages(client)
                 )
 
-                # Wait for signal with 45-second timeout
+                # Wait for signal with 60-second timeout
+                # (Increased from 45s to accommodate Claude's processing speed with bundled tools)
                 try:
                     signal = await asyncio.wait_for(
                         signal_queue.get(),
-                        timeout=45.0
+                        timeout=60.0
                     )
 
                     logger.info(
@@ -85,7 +86,7 @@ class AgentWrapper:
 
                 except asyncio.TimeoutError:
                     logger.warning(
-                        "Agent analysis timeout after 45 seconds - "
+                        "Agent analysis timeout after 60 seconds - "
                         "agent did not call submit_trading_signal"
                     )
 
@@ -229,7 +230,7 @@ class AgentWrapper:
             'sentiment_score': 0.0,
             'liquidity_score': 0.0,
             'correlation_score': 0.0,
-            'analysis': 'Analysis timeout - exceeded 45 second limit'
+            'analysis': 'Analysis timeout - exceeded 60 second limit'
         }
 
     def _error_response(self, error_msg: str) -> Dict[str, Any]:

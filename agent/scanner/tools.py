@@ -116,12 +116,12 @@ async def submit_trading_signal(args: Dict[str, Any]) -> Dict[str, Any]:
             'error': f'tp1 must be positive, got {tp1}'
         }
 
-    # Validate symbol format (basic check)
-    if '/' not in symbol:
-        logger.error(f"Invalid symbol format: {symbol} (expected format: BASE/QUOTE)")
+    # Validate symbol is not empty (accept both BTCUSDT and BTC/USDT formats)
+    if not symbol or len(symbol.strip()) == 0:
+        logger.error(f"Invalid symbol: empty or whitespace")
         return {
             'status': 'error',
-            'error': f'Invalid symbol format: {symbol}'
+            'error': 'Symbol cannot be empty'
         }
 
     # Validate analysis is not empty
