@@ -13,8 +13,8 @@ async def test_fetch_technical_snapshot_success():
     mock_4h_data = {"ohlcv": [[11, 12, 13, 14, 15]], "indicators": {"rsi": 60}}
     mock_price = 93500.0
 
-    with patch('agent.scanner.tools.fetch_market_data_internal') as mock_fetch, \
-         patch('agent.scanner.tools.get_current_price_internal') as mock_price_fn:
+    with patch('src.agent.scanner.tools.fetch_market_data_internal') as mock_fetch, \
+         patch('src.agent.scanner.tools.get_current_price_internal') as mock_price_fn:
 
         # Setup mocks to return successful data
         mock_fetch.side_effect = [mock_15m_data, mock_1h_data, mock_4h_data]
@@ -55,8 +55,8 @@ async def test_fetch_technical_snapshot_partial_failure():
     mock_1h_data = {"ohlcv": [[6, 7, 8, 9, 10]], "indicators": {"rsi": 55}}
     mock_price = 93500.0
 
-    with patch('agent.scanner.tools.fetch_market_data_internal') as mock_fetch, \
-         patch('agent.scanner.tools.get_current_price_internal') as mock_price_fn:
+    with patch('src.agent.scanner.tools.fetch_market_data_internal') as mock_fetch, \
+         patch('src.agent.scanner.tools.get_current_price_internal') as mock_price_fn:
 
         # 4h fetch fails, others succeed
         mock_fetch.side_effect = [
@@ -93,8 +93,8 @@ async def test_fetch_sentiment_data_success():
     ]
     mock_summary = "Positive catalysts: ETF approval, institutional demand"
 
-    with patch('agent.scanner.tools.generate_sentiment_query_internal') as mock_query_fn, \
-         patch('agent.scanner.tools.execute_web_search_internal') as mock_search:
+    with patch('src.agent.scanner.tools.generate_sentiment_query_internal') as mock_query_fn, \
+         patch('src.agent.scanner.tools.execute_web_search_internal') as mock_search:
 
         mock_query_fn.return_value = mock_query
         mock_search.return_value = mock_web_results
@@ -128,8 +128,8 @@ async def test_fetch_sentiment_data_web_search_failure():
     """Test fetch_sentiment_data with web search failure."""
     mock_query = "Bitcoin BTC price analysis catalysts"
 
-    with patch('agent.scanner.tools.generate_sentiment_query_internal') as mock_query_fn, \
-         patch('agent.scanner.tools.execute_web_search_internal') as mock_search:
+    with patch('src.agent.scanner.tools.generate_sentiment_query_internal') as mock_query_fn, \
+         patch('src.agent.scanner.tools.execute_web_search_internal') as mock_search:
 
         mock_query_fn.return_value = mock_query
         mock_search.side_effect = Exception("Web search API error")

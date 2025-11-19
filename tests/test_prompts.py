@@ -26,7 +26,7 @@ def test_build_analysis_prompt():
     assert 'LONG' in prompt
     assert '+7.2' in prompt  # Check for the value (works with both 7.2% and 7.20%)
     assert 'multi-timeframe' in prompt.lower()
-    assert 'perplexity' in prompt.lower()
+    assert 'web search' in prompt.lower()  # Updated from 'perplexity' after OpenWebSearch MCP migration
     assert 'confidence' in prompt.lower()
     assert '60' in prompt  # Min confidence threshold
 
