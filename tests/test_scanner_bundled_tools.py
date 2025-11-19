@@ -46,3 +46,38 @@ async def test_fetch_technical_snapshot_success():
         # Verify no warnings
         assert data["warnings"] == []
         assert data["success_count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_fetch_technical_snapshot_partial_failure():
+    """Test fetch with one timeframe failing."""
+    mock_15m_data = {"ohlcv": [[1, 2, 3, 4, 5]], "indicators": {"rsi": 50}}
+    mock_1h_data = {"ohlcv": [[6, 7, 8, 9, 10]], "indicators": {"rsi": 55}}
+    mock_price = 93500.0
+
+    with patch('agent.scanner.tools.fetch_market_data_internal') as mock_fetch, \
+         patch('agent.scanner.tools.get_current_price_internal') as mock_price_fn:
+
+        # 4h fetch fails, others succeed
+        mock_fetch.side_effect = [
+            mock_15m_data,
+            mock_1h_data,
+            Exception("API rate limit exceeded")  # 4h fails
+        ]
+        mock_price_fn.return_value = mock_price
+
+        result = await fetch_technical_snapshot.handler({"symbol": "BTCUSDT"})
+
+        import json
+        data = json.loads(result["content"][0]["text"])
+
+        # Verify partial success
+        assert data["timeframes"]["15m"] == mock_15m_data
+        assert data["timeframes"]["1h"] == mock_1h_data
+        assert data["timeframes"]["4h"] is None  # Failed
+        assert data["current_price"] == mock_price
+
+        # Verify warning present
+        assert len(data["warnings"]) == 1
+        assert "4h data fetch failed" in data["warnings"][0]
+        assert data["success_count"] == 3  # 3 out of 4 succeeded
