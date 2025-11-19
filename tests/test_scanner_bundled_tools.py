@@ -1,7 +1,7 @@
 """Tests for scanner bundled tools."""
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from agent.scanner.tools import fetch_technical_snapshot, fetch_sentiment_data
+from src.agent.scanner.tools import fetch_technical_snapshot, fetch_sentiment_data
 
 
 @pytest.mark.asyncio

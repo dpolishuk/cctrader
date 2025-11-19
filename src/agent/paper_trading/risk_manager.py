@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent.database.paper_operations import PaperTradingDatabase
+from src.agent.database.paper_operations import PaperTradingDatabase
 
 @dataclass
 class RiskLimits:

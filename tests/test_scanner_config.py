@@ -1,5 +1,5 @@
 import pytest
-from agent.scanner.config import ScannerConfig
+from src.agent.scanner.config import ScannerConfig
 
 def test_scanner_config_defaults():
     """Test scanner configuration has correct defaults."""

@@ -1,5 +1,5 @@
 import pytest
-from agent.scanner.risk_config import RiskConfig, ConfidenceTier
+from src.agent.scanner.risk_config import RiskConfig, ConfidenceTier
 
 def test_risk_config_defaults():
     """Test risk configuration has correct portfolio limits."""

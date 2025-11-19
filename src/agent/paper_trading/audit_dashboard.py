@@ -6,8 +6,8 @@ from rich.panel import Panel
 from rich.layout import Layout
 from datetime import datetime
 
-from agent.database.paper_operations import PaperTradingDatabase
-from agent.paper_trading.metrics_calculator import PerformanceMetricsCalculator
+from src.agent.database.paper_operations import PaperTradingDatabase
+from src.agent.paper_trading.metrics_calculator import PerformanceMetricsCalculator
 
 class AuditDashboard:
     """Generate real-time paper trading audit reports."""

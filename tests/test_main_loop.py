@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from agent.scanner.main_loop import MarketMoversScanner
-from agent.scanner.config import ScannerConfig
-from agent.scanner.risk_config import RiskConfig
+from src.agent.scanner.main_loop import MarketMoversScanner
+from src.agent.scanner.config import ScannerConfig
+from src.agent.scanner.risk_config import RiskConfig
 
 @pytest.mark.asyncio
 async def test_scanner_initialization():

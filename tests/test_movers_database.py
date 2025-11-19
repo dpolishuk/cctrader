@@ -1,8 +1,8 @@
 import pytest
 import aiosqlite
 from pathlib import Path
-from agent.database.movers_schema import create_movers_tables
-from agent.database.paper_operations import PaperTradingDatabase
+from src.agent.database.movers_schema import create_movers_tables
+from src.agent.database.paper_operations import PaperTradingDatabase
 
 @pytest.mark.asyncio
 async def test_create_movers_tables(tmp_path):

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock
-from agent.scanner.momentum_scanner import MomentumScanner
+from src.agent.scanner.momentum_scanner import MomentumScanner
 
 @pytest.mark.asyncio
 async def test_scan_for_movers_identifies_gainers():

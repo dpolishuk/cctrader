@@ -2,7 +2,7 @@
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
-from agent.scanner.symbol_manager import FuturesSymbolManager
+from src.agent.scanner.symbol_manager import FuturesSymbolManager
 
 @pytest.mark.asyncio
 async def test_refresh_symbols_filters_usdt_futures():

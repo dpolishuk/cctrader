@@ -5,10 +5,10 @@ from pathlib import Path
 import os
 import tempfile
 
-from agent.database.paper_schema import init_paper_trading_db
-from agent.database.paper_operations import PaperTradingDatabase
-from agent.paper_trading.portfolio_manager import PaperPortfolioManager
-from agent.paper_trading.risk_manager import TradeProposal
+from src.agent.database.paper_schema import init_paper_trading_db
+from src.agent.database.paper_operations import PaperTradingDatabase
+from src.agent.paper_trading.portfolio_manager import PaperPortfolioManager
+from src.agent.paper_trading.risk_manager import TradeProposal
 
 @pytest.fixture
 async def test_db():

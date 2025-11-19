@@ -127,8 +127,8 @@ def create_portfolio(name, capital, mode):
     async def run():
         db_path = Path(os.getenv("DB_PATH", "./trading_data.db"))
 
-        from agent.database.paper_schema import init_paper_trading_db
-        from agent.database.paper_operations import PaperTradingDatabase
+        from src.agent.database.paper_schema import init_paper_trading_db
+        from src.agent.database.paper_operations import PaperTradingDatabase
 
         await init_paper_trading_db(db_path)
 
@@ -152,9 +152,9 @@ def paper_status(name):
     async def run():
         db_path = Path(os.getenv("DB_PATH", "./trading_data.db"))
 
-        from agent.paper_trading.portfolio_manager import PaperPortfolioManager
-        from agent.paper_trading.audit_dashboard import AuditDashboard
-        from agent.database.paper_operations import PaperTradingDatabase
+        from src.agent.paper_trading.portfolio_manager import PaperPortfolioManager
+        from src.agent.paper_trading.audit_dashboard import AuditDashboard
+        from src.agent.database.paper_operations import PaperTradingDatabase
 
         manager = PaperPortfolioManager(db_path, name)
         await manager.initialize()
@@ -192,7 +192,7 @@ def reset_breaker(portfolio):
     async def run():
         db_path = Path(os.getenv("DB_PATH", "./trading_data.db"))
 
-        from agent.paper_trading.portfolio_manager import PaperPortfolioManager
+        from src.agent.paper_trading.portfolio_manager import PaperPortfolioManager
 
         manager = PaperPortfolioManager(db_path, portfolio)
         await manager.initialize()
@@ -209,13 +209,13 @@ def reset_breaker(portfolio):
 def scan_movers(interval, portfolio):
     """Run market movers scanner - detects and analyzes 5%+ movers."""
     async def run_scanner():
-        from agent.tools.market_data import get_exchange
-        from agent.paper_trading.portfolio_manager import PaperPortfolioManager
-        from agent.database.paper_operations import PaperTradingDatabase
-        from agent.database.paper_schema import init_paper_trading_db
-        from agent.database.movers_schema import create_movers_tables
-        from agent.scanner.main_loop import MarketMoversScanner
-        from agent.config import config
+        from src.agent.tools.market_data import get_exchange
+        from src.agent.paper_trading.portfolio_manager import PaperPortfolioManager
+        from src.agent.database.paper_operations import PaperTradingDatabase
+        from src.agent.database.paper_schema import init_paper_trading_db
+        from src.agent.database.movers_schema import create_movers_tables
+        from src.agent.scanner.main_loop import MarketMoversScanner
+        from src.agent.config import config
         import aiosqlite
 
         # Setup logging
@@ -263,11 +263,11 @@ def scan_movers(interval, portfolio):
 
         # Create agent wrapper
         from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server
-        from agent.scanner.agent_wrapper import AgentWrapper
-        from agent.tools.market_data import fetch_market_data, get_current_price
-        from agent.tools.technical_analysis import analyze_technicals, multi_timeframe_analysis
-        from agent.tools.sentiment import analyze_market_sentiment, detect_market_events
-        from agent.scanner.tools import submit_trading_signal, fetch_technical_snapshot, fetch_sentiment_data
+        from src.agent.scanner.agent_wrapper import AgentWrapper
+        from src.agent.tools.market_data import fetch_market_data, get_current_price
+        from src.agent.tools.technical_analysis import analyze_technicals, multi_timeframe_analysis
+        from src.agent.tools.sentiment import analyze_market_sentiment, detect_market_events
+        from src.agent.scanner.tools import submit_trading_signal, fetch_technical_snapshot, fetch_sentiment_data
 
         # Create MCP server with ONLY bundled tools for scanner agent
         # Individual tools removed to prevent timeout issues from sequential calls

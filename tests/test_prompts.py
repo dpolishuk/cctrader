@@ -1,5 +1,5 @@
 import pytest
-from agent.scanner.prompts import PromptBuilder
+from src.agent.scanner.prompts import PromptBuilder
 
 def test_build_analysis_prompt():
     """Test building agent analysis prompt."""

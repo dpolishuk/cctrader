@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from agent.scanner.risk_validator import RiskValidator
-from agent.scanner.risk_config import RiskConfig
+from src.agent.scanner.risk_validator import RiskValidator
+from src.agent.scanner.risk_config import RiskConfig
 
 @pytest.mark.asyncio
 async def test_validate_all_checks_pass():

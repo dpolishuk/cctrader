@@ -1,5 +1,5 @@
 import pytest
-from agent.scanner.confidence import ConfidenceCalculator
+from src.agent.scanner.confidence import ConfidenceCalculator
 
 def test_calculate_technical_score():
     """Test technical analysis score calculation."""

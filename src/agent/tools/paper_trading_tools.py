@@ -4,10 +4,10 @@ from claude_agent_sdk import tool
 from pathlib import Path
 import os
 
-from agent.database.paper_schema import init_paper_trading_db
-from agent.database.paper_operations import PaperTradingDatabase
-from agent.paper_trading.portfolio_manager import PaperPortfolioManager
-from agent.paper_trading.audit_dashboard import AuditDashboard
+from src.agent.database.paper_schema import init_paper_trading_db
+from src.agent.database.paper_operations import PaperTradingDatabase
+from src.agent.paper_trading.portfolio_manager import PaperPortfolioManager
+from src.agent.paper_trading.audit_dashboard import AuditDashboard
 
 @tool(
     name="create_paper_portfolio",

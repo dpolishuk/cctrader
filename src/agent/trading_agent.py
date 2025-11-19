@@ -46,8 +46,8 @@ class TradingAgent:
         await init_database(self.db_path)
 
         if self.paper_trading:
-            from agent.database.paper_schema import init_paper_trading_db
-            from agent.paper_trading.portfolio_manager import PaperPortfolioManager
+            from src.agent.database.paper_schema import init_paper_trading_db
+            from src.agent.paper_trading.portfolio_manager import PaperPortfolioManager
 
             await init_paper_trading_db(self.db_path)
             self.paper_manager = PaperPortfolioManager(self.db_path, self.paper_portfolio)

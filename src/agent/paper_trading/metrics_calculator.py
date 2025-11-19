@@ -3,7 +3,7 @@ import math
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
-from agent.database.paper_operations import PaperTradingDatabase
+from src.agent.database.paper_operations import PaperTradingDatabase
 
 class PerformanceMetricsCalculator:
     """Calculate trading performance metrics."""

@@ -3,9 +3,9 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 from pathlib import Path
 
-from agent.database.paper_operations import PaperTradingDatabase
-from agent.paper_trading.execution_engine import ExecutionEngine
-from agent.paper_trading.risk_manager import RiskManager, TradeProposal
+from src.agent.database.paper_operations import PaperTradingDatabase
+from src.agent.paper_trading.execution_engine import ExecutionEngine
+from src.agent.paper_trading.risk_manager import RiskManager, TradeProposal
 
 class PaperPortfolioManager:
     """Manages paper trading portfolio operations."""
