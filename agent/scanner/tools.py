@@ -179,7 +179,7 @@ async def submit_trading_signal(args: Dict[str, Any]) -> Dict[str, Any]:
 async def fetch_market_data_internal(symbol: str, timeframe: str, limit: int = 50) -> Dict[str, Any]:
     """Internal function to fetch market data."""
     from agent.tools.market_data import fetch_market_data
-    result = await fetch_market_data({
+    result = await fetch_market_data.handler({
         "symbol": symbol,
         "timeframe": timeframe,
         "limit": limit
@@ -193,7 +193,7 @@ async def fetch_market_data_internal(symbol: str, timeframe: str, limit: int = 5
 async def get_current_price_internal(symbol: str) -> float:
     """Internal function to get current price."""
     from agent.tools.market_data import get_current_price
-    result = await get_current_price({"symbol": symbol})
+    result = await get_current_price.handler({"symbol": symbol})
     # Extract price from MCP response format
     if "content" in result and len(result["content"]) > 0:
         data = json.loads(result["content"][0]["text"])
@@ -291,15 +291,12 @@ async def fetch_technical_snapshot(args: Dict[str, Any]) -> Dict[str, Any]:
 async def generate_sentiment_query_internal(symbol: str, context: str = "") -> str:
     """Internal function to generate sentiment query."""
     from agent.tools.sentiment import analyze_market_sentiment
-    result = await analyze_market_sentiment({
+    result = await analyze_market_sentiment.handler({
         "symbol": symbol,
         "context": context
     })
-    # Extract query from MCP response format
-    if "content" in result and len(result["content"]) > 0:
-        data = json.loads(result["content"][0]["text"])
-        return data.get("query", f"{symbol} cryptocurrency news")
-    return f"{symbol} cryptocurrency news"
+    # Extract query from root field instead of parsing JSON
+    return result.get("search_query", f"{symbol} cryptocurrency news")
 
 
 async def execute_web_search_internal(query: str) -> List[Dict[str, str]]:

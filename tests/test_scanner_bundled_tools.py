@@ -121,3 +121,37 @@ async def test_fetch_sentiment_data_success():
         # Verify no warnings
         assert data["warnings"] == []
         assert data["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_fetch_sentiment_data_web_search_failure():
+    """Test fetch_sentiment_data with web search failure."""
+    mock_query = "Bitcoin BTC price analysis catalysts"
+
+    with patch('agent.scanner.tools.generate_sentiment_query_internal') as mock_query_fn, \
+         patch('agent.scanner.tools.execute_web_search_internal') as mock_search:
+
+        mock_query_fn.return_value = mock_query
+        mock_search.side_effect = Exception("Web search API error")
+
+        result = await fetch_sentiment_data.handler({"symbol": "BTCUSDT", "context": "5% up"})
+
+        import json
+        data = json.loads(result["content"][0]["text"])
+
+        # Verify query still generated
+        assert data["sentiment_query"] == mock_query
+
+        # Verify web results empty due to failure
+        assert data["web_results"] == []
+
+        # Verify warning generated
+        assert len(data["warnings"]) == 1
+        assert "Web search failed" in data["warnings"][0]
+
+        # Verify success is False
+        assert data["success"] is False
+
+        # Verify neutral sentiment score (15/30) when no results
+        assert data["suggested_sentiment_score"] == 15
+        assert "No web results" in data["sentiment_summary"]
