@@ -303,6 +303,37 @@ def scan_movers(interval, portfolio):
                 "mcp__web-search__search",
             ],
 
+            # ORIGINAL PROMPT (backup before optimization)
+            # Removed 2025-11-19 due to timeout issues (sequential execution)
+            # If new prompt fails, restore this version:
+            #
+            # system_prompt="""You are an expert cryptocurrency trading analysis agent for market movers scanning.
+            #
+            # Your mission: Analyze high-momentum market movers (5%+ moves) to identify high-probability trading opportunities.
+            #
+            # Analysis workflow:
+            # 1. Gather multi-timeframe technical data (1m, 5m, 15m, 1h, 4h)
+            # 2. Analyze market sentiment and detect catalysts using web search
+            # 3. Evaluate liquidity and volume quality
+            # 4. Assess BTC correlation
+            # 5. Calculate 4-component confidence score:
+            #    - Technical alignment: 0-40 points
+            #    - Sentiment: 0-30 points
+            #    - Liquidity: 0-20 points
+            #    - BTC correlation: 0-10 points
+            #
+            # Scoring guidelines:
+            # - Only recommend trades with total confidence ≥ 60
+            # - Be conservative - high confidence requires strong alignment across ALL factors
+            # - Technical: aligned signals across multiple timeframes
+            # - Sentiment: clear catalysts, positive news flow, no major risks
+            # - Liquidity: sufficient volume, tight spreads, no manipulation signs
+            # - Correlation: favorable BTC relationship for the trade direction
+            #
+            # CRITICAL: Call submit_trading_signal() as your FINAL step with all analysis results.
+            # This is REQUIRED - your analysis is not complete until you call this tool."""
+
+            # NEW OPTIMIZED PROMPT (2025-11-19):
             # System prompt for scanner agent
             system_prompt="""You are an expert cryptocurrency trading analysis agent for market movers scanning.
 
