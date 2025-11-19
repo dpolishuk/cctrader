@@ -1,0 +1,137 @@
+BUNDLED TOOLS INTEGRATION TEST - V2 (POST-FIX)
+==============================================
+Date: 2025-11-19 13:49-13:52 UTC
+Test Duration: 3 minutes (timeout enforced)
+Scanner Interval: 60 seconds
+Command: python -m agent.main scan-movers --interval 60
+
+CONFIGURATION FIX APPLIED:
+- Removed individual tools (get_current_price, fetch_market_data, etc.) from MCP server registration
+- Only bundled tools exposed to agent: fetch_technical_snapshot, fetch_sentiment_data, submit_trading_signal
+
+TEST RESULTS:
+=============
+
+VERDICT: ❌ PARTIAL SUCCESS - STILL HAS ISSUES
+
+ANALYSIS #1: TNSR/USDT (LONG) +36.47%
+--------------------------------------
+Start: 13:50:24.549
+Timeout: 13:51:09.552
+Duration: 45.0s (HIT TIMEOUT)
+
+Message Pattern:
+  📨 Message #1: text only (reasoning)
+  📨 Message #2: fetch_technical_snapshot ✅
+  📨 Message #3: fetch_sentiment_data ✅
+  📨 Message #4: text only (reasoning)
+  📨 Message #5: fetch_technical_snapshot ⚠️  DUPLICATE #2
+  📨 Message #6: text only (reasoning)
+  📨 Message #7: submit_trading_signal ✅ (but after 45s timeout)
+  📨 Message #8: text only (final)
+
+Tool Calls: 4 total (3 unique tools, 1 duplicate)
+  - fetch_technical_snapshot: 2 calls (DUPLICATE!)
+  - fetch_sentiment_data: 1 call
+  - submit_trading_signal: 1 call
+
+Result: ⚠️ TIMEOUT - submitted signal but exceeded 45s limit
+
+
+ANALYSIS #2: JELLYJELLY/USDT (SHORT) -15.79%
+---------------------------------------------
+Start: 13:51:12.928
+Timeout: 13:51:57.931
+Duration: 45.0s (HIT TIMEOUT)
+
+Message Pattern:
+  📨 Message #1: text only (reasoning)
+  📨 Message #2: fetch_technical_snapshot ✅
+  📨 Message #3: fetch_sentiment_data ✅
+  📨 Message #4: text only (reasoning)
+  📨 Message #5: submit_trading_signal ✅
+  📨 Message #6: text only (final)
+
+Tool Calls: 3 total (3 unique tools)
+  - fetch_technical_snapshot: 1 call
+  - fetch_sentiment_data: 1 call
+  - submit_trading_signal: 1 call
+
+Result: ⚠️ TIMEOUT - submitted signal but exceeded 45s limit
+
+
+SCAN CYCLE STATS:
+-----------------
+Total Cycle Time: 127.8s
+Symbols Monitored: 134 futures pairs
+Movers Found: 1 gainer, 1 loser
+Signals Generated: 0 (both below confidence threshold)
+Trades Executed: 0
+
+
+SUCCESS INDICATORS:
+===================
+✅ NO individual tool calls (get_current_price, etc.)
+✅ Agent only uses bundled tools
+✅ Tool call pattern is mostly correct (3-4 messages)
+⚠️  Analysis #1 had duplicate fetch_technical_snapshot call
+⚠️  Analysis #2 was cleaner (3 unique tools only)
+❌ Both analyses hit 45s timeout
+❌ Analysis time: 45s (target: <30s)
+❌ Agent still taking too long to complete
+
+
+ROOT CAUSE ANALYSIS:
+====================
+1. Fix WORKED: Individual tools successfully removed from agent visibility
+2. NEW ISSUE: Agent is still slow (45s per analysis)
+3. Duplicate calls: Analysis #1 called fetch_technical_snapshot twice
+4. The timeout is masking actual completion time
+
+The configuration fix successfully removed individual tools, but the agent
+is still hitting the 45-second timeout. This suggests the slowness is NOT
+from the tool calls themselves, but from the agent's reasoning/processing
+between tool calls.
+
+
+NEXT STEPS:
+===========
+1. ✅ Configuration fix successful - individual tools removed
+2. ❌ Need to address agent processing speed (45s is too slow)
+3. ⚠️  Investigate why Analysis #1 duplicated fetch_technical_snapshot
+4. Consider:
+   - Increase timeout to 60s to see actual completion time
+   - Add streaming/intermediate results
+   - Optimize agent prompt to reduce reasoning time
+   - Monitor token usage (high tokens = slow processing)
+
+
+COMPARISON TO V1 (PRE-FIX):
+===========================
+V1 Issues:
+  - Agent called individual tools AFTER bundled tools
+  - Tool call pattern was chaotic (10+ messages)
+  - Mixed bundled and individual tool usage
+
+V2 Improvements:
+  - ✅ Individual tools completely removed
+  - ✅ Tool call pattern cleaner (3-4 messages)
+  - ✅ Only bundled tools used
+
+V2 Remaining Issues:
+  - ❌ Still hitting timeout (45s)
+  - ⚠️  Occasional duplicate calls
+  - Analysis speed not improved
+
+
+RAW LOG SAMPLE:
+===============
+2025-11-19 13:50:28,190 - agent.scanner.agent_wrapper - INFO - 📨 Message #1: text only (no tools)
+2025-11-19 13:50:28,200 - agent.scanner.agent_wrapper - INFO - 📨 Message #2: 1 tool(s) - mcp__trading__fetch_technical_snapshot
+2025-11-19 13:50:28,210 - agent.scanner.agent_wrapper - INFO - 📨 Message #3: 1 tool(s) - mcp__trading__fetch_sentiment_data
+2025-11-19 13:50:32,680 - agent.scanner.agent_wrapper - INFO - 📨 Message #4: text only (no tools)
+2025-11-19 13:50:32,691 - agent.scanner.agent_wrapper - INFO - 📨 Message #5: 1 tool(s) - mcp__trading__fetch_technical_snapshot ⚠️  DUPLICATE #2
+2025-11-19 13:50:42,508 - agent.scanner.agent_wrapper - INFO - 📨 Message #7: 1 tool(s) - mcp__trading__submit_trading_signal
+2025-11-19 13:51:09,552 - agent.scanner.agent_wrapper - WARNING - Agent analysis timeout after 45 seconds
+
+Full log: /tmp/bundled_tools_test_v2.log
