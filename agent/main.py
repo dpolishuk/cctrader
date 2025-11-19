@@ -267,20 +267,25 @@ def scan_movers(interval, portfolio):
         from agent.tools.market_data import fetch_market_data, get_current_price
         from agent.tools.technical_analysis import analyze_technicals, multi_timeframe_analysis
         from agent.tools.sentiment import analyze_market_sentiment, detect_market_events
-        from agent.scanner.tools import submit_trading_signal
+        from agent.scanner.tools import submit_trading_signal, fetch_technical_snapshot, fetch_sentiment_data
 
-        # Create MCP server with all trading tools including submit_trading_signal
+        # Create MCP server with all trading tools including bundled tools
         trading_tools_server = create_sdk_mcp_server(
             name="trading_tools",
             version="1.0.0",
             tools=[
+                # Scanner bundled tools
+                fetch_technical_snapshot,
+                fetch_sentiment_data,
+                submit_trading_signal,
+
+                # Keep individual tools for other agents (not scanner)
                 fetch_market_data,
                 get_current_price,
                 analyze_technicals,
                 multi_timeframe_analysis,
                 analyze_market_sentiment,
                 detect_market_events,
-                submit_trading_signal,  # Agent uses this to return structured analysis
             ]
         )
 
@@ -291,16 +296,12 @@ def scan_movers(interval, portfolio):
                 # OpenWebSearch MCP is available via environment
             },
 
-            # Allowed tools
+            # Allowed tools - scanner uses only bundled tools
             allowed_tools=[
-                "mcp__trading__fetch_market_data",
-                "mcp__trading__get_current_price",
-                "mcp__trading__analyze_technicals",
-                "mcp__trading__multi_timeframe_analysis",
-                "mcp__trading__analyze_market_sentiment",
-                "mcp__trading__detect_market_events",
+                "mcp__trading__fetch_technical_snapshot",
+                "mcp__trading__fetch_sentiment_data",
                 "mcp__trading__submit_trading_signal",
-                "mcp__web-search__search",
+                "mcp__web-search__search",  # Used internally by fetch_sentiment_data
             ],
 
             # ORIGINAL PROMPT (backup before optimization)
