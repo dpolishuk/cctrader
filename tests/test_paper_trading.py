@@ -1,5 +1,6 @@
 """Integration tests for paper trading system."""
 import pytest
+import pytest_asyncio
 import asyncio
 from pathlib import Path
 import os
@@ -10,7 +11,7 @@ from src.agent.database.paper_operations import PaperTradingDatabase
 from src.agent.paper_trading.portfolio_manager import PaperPortfolioManager
 from src.agent.paper_trading.risk_manager import TradeProposal
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_db():
     """Create temporary test database."""
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:

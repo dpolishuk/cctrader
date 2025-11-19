@@ -12,6 +12,7 @@ AI-powered cryptocurrency trading analysis agent using Anthropic's Claude Agent 
 - 💾 SQLite persistence for historical analysis
 - 🔄 Continuous monitoring mode
 - 🖥️ CLI interface
+- 📈 Token tracking and cost estimation
 
 ## Installation
 
@@ -68,6 +69,77 @@ python -m src.agent.main signals --symbol BTC/USDT --limit 10
 Check current portfolio position:
 ```bash
 python -m src.agent.main status --symbol BTC/USDT
+```
+
+## Token Tracking
+
+Monitor Claude API token usage, estimate costs, and track rate limits.
+
+### Features
+
+- **Real-time tracking**: Captures tokens for every agent call
+- **Cost estimation**: Calculates costs based on Sonnet 4.5 pricing
+- **Rate limit monitoring**: Shows proximity to Claude Code hourly/daily limits
+- **Historical analysis**: Query usage by hour, day, or session
+- **Visual display**: Color-coded alerts (green/yellow/red) for limit warnings
+
+### Usage
+
+**View usage statistics:**
+```bash
+python -m agent.main token-stats --period hourly
+python -m agent.main token-stats --period daily
+```
+
+**Check rate limit status:**
+```bash
+python -m agent.main token-limits
+```
+
+**Fetch current limits from docs:**
+```bash
+python -m agent.main fetch-limits
+```
+
+**Display tokens during analysis:**
+```bash
+python -m agent.main analyze --show-tokens
+```
+
+### Configuration
+
+Configure in `.env`:
+
+```env
+# Enable/disable tracking
+TOKEN_TRACKING_ENABLED=true
+
+# Claude Code rate limits
+CLAUDE_HOURLY_LIMIT=500
+CLAUDE_DAILY_LIMIT=5000
+
+# Pricing (per 1M tokens)
+CLAUDE_COST_PER_1M_INPUT=3.00
+CLAUDE_COST_PER_1M_OUTPUT=15.00
+
+# Alert thresholds (%)
+TOKEN_WARNING_THRESHOLD=50
+TOKEN_CRITICAL_THRESHOLD=80
+
+# Data retention (days)
+TOKEN_HISTORY_DAYS=90
+```
+
+### Database Tables
+
+Token tracking uses three tables:
+- `token_usage`: Per-request metrics
+- `token_sessions`: Session aggregates
+- `rate_limit_tracking`: Rolling window counters
+
+Initialize tables:
+```bash
+python scripts/init_token_tracking.py
 ```
 
 ## Architecture

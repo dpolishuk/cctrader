@@ -31,6 +31,16 @@ class Config:
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
+    # Token Tracking
+    TOKEN_TRACKING_ENABLED: bool = os.getenv("TOKEN_TRACKING_ENABLED", "true").lower() == "true"
+    CLAUDE_HOURLY_LIMIT: int = int(os.getenv("CLAUDE_HOURLY_LIMIT", "500"))
+    CLAUDE_DAILY_LIMIT: int = int(os.getenv("CLAUDE_DAILY_LIMIT", "5000"))
+    CLAUDE_COST_PER_1M_INPUT: float = float(os.getenv("CLAUDE_COST_PER_1M_INPUT", "3.00"))
+    CLAUDE_COST_PER_1M_OUTPUT: float = float(os.getenv("CLAUDE_COST_PER_1M_OUTPUT", "15.00"))
+    TOKEN_WARNING_THRESHOLD: int = int(os.getenv("TOKEN_WARNING_THRESHOLD", "50"))
+    TOKEN_CRITICAL_THRESHOLD: int = int(os.getenv("TOKEN_CRITICAL_THRESHOLD", "80"))
+    TOKEN_HISTORY_DAYS: int = int(os.getenv("TOKEN_HISTORY_DAYS", "90"))
+
     def validate(self):
         """Validate configuration."""
         if not self.ANTHROPIC_API_KEY:

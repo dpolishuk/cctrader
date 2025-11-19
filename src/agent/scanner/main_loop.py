@@ -213,7 +213,7 @@ class MarketMoversScanner:
 
         try:
             # Invoke agent
-            response = await self.agent.run(prompt)
+            response = await self.agent.run(prompt, symbol=mover['symbol'])
 
             # Extract confidence
             confidence = response.get('confidence', 0)
