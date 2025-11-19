@@ -1,7 +1,8 @@
 """Wrapper for Claude Agent to provide scanner-compatible interface."""
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import asyncio
 import logging
+import time
 from claude_agent_sdk import (
     ClaudeAgentOptions,
     ClaudeSDKClient,
@@ -17,16 +18,18 @@ logger = logging.getLogger(__name__)
 class AgentWrapper:
     """Wraps Claude Agent SDK to provide scanner-compatible interface."""
 
-    def __init__(self, agent_options: ClaudeAgentOptions):
+    def __init__(self, agent_options: ClaudeAgentOptions, token_tracker: Optional[Any] = None):
         """
         Initialize wrapper.
 
         Args:
             agent_options: ClaudeAgentOptions with tools, system prompt, etc.
+            token_tracker: Optional TokenTracker instance for tracking usage
         """
         self.agent_options = agent_options
+        self.token_tracker = token_tracker
 
-    async def run(self, prompt: str) -> Dict[str, Any]:
+    async def run(self, prompt: str, symbol: str = None) -> Dict[str, Any]:
         """
         Run analysis and return structured response.
 
@@ -39,6 +42,7 @@ class AgentWrapper:
 
         Args:
             prompt: Analysis prompt
+            symbol: Optional symbol for metadata tracking
 
         Returns:
             Dict with confidence, entry_price, stop_loss, tp1, scoring components, analysis
@@ -49,6 +53,10 @@ class AgentWrapper:
         # Set queue in module-level storage so submit_trading_signal tool can access it
         set_signal_queue(signal_queue)
 
+        # Track timing for token tracking
+        start_time = time.time()
+        final_message = None
+
         try:
             # Create agent client with configured options
             async with ClaudeSDKClient(options=self.agent_options) as client:
@@ -57,7 +65,7 @@ class AgentWrapper:
                 # Send analysis prompt
                 await client.query(prompt)
 
-                # Process agent messages (log for debugging)
+                # Process agent messages (log for debugging and capture final message)
                 message_task = asyncio.create_task(
                     self._process_messages(client)
                 )
@@ -80,6 +88,16 @@ class AgentWrapper:
                         await message_task
                     except asyncio.CancelledError:
                         pass
+
+                    # Record token usage if tracker is available
+                    if self.token_tracker and hasattr(self, '_last_message'):
+                        duration = time.time() - start_time
+                        await self.token_tracker.record_usage(
+                            result=self._last_message,
+                            operation_type="mover_analysis",
+                            duration_seconds=duration,
+                            metadata={"symbol": symbol or signal.get('symbol', 'unknown')}
+                        )
 
                     return signal
 
@@ -124,6 +142,8 @@ class AgentWrapper:
                 logger.debug(f"📬 Received message type: {message_type}")
 
                 if isinstance(message, AssistantMessage):
+                    # Capture for token tracking
+                    self._last_message = message
                     message_count += 1
 
                     # Count tools in this message

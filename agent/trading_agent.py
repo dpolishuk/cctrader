@@ -1,7 +1,9 @@
 """Core trading agent using Claude Agent SDK."""
 import asyncio
 import os
+import time
 from pathlib import Path
+from typing import Optional
 from dotenv import load_dotenv
 from claude_agent_sdk import (
     tool,
@@ -11,6 +13,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     TextBlock
 )
+import aiosqlite
 
 # Import all tools
 from .tools.market_data import fetch_market_data, get_current_price
@@ -27,6 +30,9 @@ from .tools.paper_trading_tools import (
 )
 from .database.schema import init_database
 from .database.operations import TradingDatabase
+from .tracking.token_tracker import TokenTracker
+from .database.token_schema import create_token_tracking_tables
+from .config import config
 
 load_dotenv()
 
@@ -40,6 +46,7 @@ class TradingAgent:
         self.paper_trading = paper_trading
         self.paper_portfolio = paper_portfolio
         self.paper_manager = None  # Will be initialized in initialize()
+        self.token_tracker: Optional[TokenTracker] = None
 
     async def initialize(self):
         """Initialize database and agent."""
@@ -56,6 +63,21 @@ class TradingAgent:
             print(f"✅ Paper trading mode enabled - Portfolio: {self.paper_portfolio}")
 
         print(f"✅ Database initialized at {self.db_path}")
+
+        # Initialize token tracking if enabled
+        if config.TOKEN_TRACKING_ENABLED:
+            # Ensure token tracking tables exist
+            async with aiosqlite.connect(self.db_path) as db:
+                await create_token_tracking_tables(db)
+                await db.commit()
+
+            # Initialize tracker
+            self.token_tracker = TokenTracker(
+                db_path=self.db_path,
+                operation_mode="trading_agent"
+            )
+            await self.token_tracker.start_session()
+            print(f"✅ Token tracking enabled - Session: {self.token_tracker.session_id}")
 
     def create_agent_options(self) -> ClaudeAgentOptions:
         """Create Claude Agent SDK configuration."""
@@ -189,15 +211,30 @@ Provide a comprehensive analysis report."""
             print(f"\n🔍 Analyzing {self.symbol}...")
             print(f"📊 Query: {query}\n")
 
+            # Track timing for token tracking
+            start_time = time.time()
+
             await client.query(query)
 
-            # Process responses
+            # Process responses and capture final result for token tracking
+            final_message = None
             async for message in client.receive_response():
                 if isinstance(message, AssistantMessage):
+                    final_message = message
                     for block in message.content:
                         if isinstance(block, TextBlock):
                             print(block.text)
                         # Could also handle ToolUseBlock to show tool usage
+
+            # Record token usage if tracking is enabled
+            if self.token_tracker and final_message:
+                duration = time.time() - start_time
+                await self.token_tracker.record_usage(
+                    result=final_message,
+                    operation_type="market_analysis",
+                    duration_seconds=duration,
+                    metadata={"symbol": self.symbol}
+                )
 
     async def continuous_monitor(self, interval_seconds: int = 300):
         """Continuously monitor market at specified interval."""
@@ -225,3 +262,9 @@ Provide a comprehensive analysis report."""
     def stop(self):
         """Stop continuous monitoring."""
         self.running = False
+
+    async def cleanup(self):
+        """Cleanup resources including ending token tracking session."""
+        if self.token_tracker:
+            await self.token_tracker.end_session()
+            print(f"✅ Token tracking session ended")

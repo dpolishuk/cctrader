@@ -28,7 +28,10 @@ def monitor(symbol, interval):
     async def run():
         agent = TradingAgent(symbol=symbol)
         await agent.initialize()
-        await agent.continuous_monitor(interval_seconds=interval)
+        try:
+            await agent.continuous_monitor(interval_seconds=interval)
+        finally:
+            await agent.cleanup()
 
     try:
         asyncio.run(run())
@@ -43,7 +46,10 @@ def analyze(symbol, query):
     async def run():
         agent = TradingAgent(symbol=symbol)
         await agent.initialize()
-        await agent.analyze_market(query=query)
+        try:
+            await agent.analyze_market(query=query)
+        finally:
+            await agent.cleanup()
 
     asyncio.run(run())
 
@@ -268,6 +274,10 @@ def scan_movers(interval, portfolio):
         from agent.tools.technical_analysis import analyze_technicals, multi_timeframe_analysis
         from agent.tools.sentiment import analyze_market_sentiment, detect_market_events
         from agent.scanner.tools import submit_trading_signal
+        from agent.tracking.token_tracker import TokenTracker
+        from agent.database.token_schema import create_token_tracking_tables
+        from agent.config import config
+        import aiosqlite
 
         # Create MCP server with all trading tools including submit_trading_signal
         trading_tools_server = create_sdk_mcp_server(
@@ -339,7 +349,23 @@ This is REQUIRED - your analysis is not complete until you call this tool.""",
             include_partial_messages=True,
         )
 
-        agent = AgentWrapper(agent_options)
+        # Initialize token tracking if enabled
+        token_tracker = None
+        if config.TOKEN_TRACKING_ENABLED:
+            # Ensure token tracking tables exist
+            async with aiosqlite.connect(db_path) as db:
+                await create_token_tracking_tables(db)
+                await db.commit()
+
+            # Initialize tracker
+            token_tracker = TokenTracker(
+                db_path=db_path,
+                operation_mode="scanner"
+            )
+            await token_tracker.start_session()
+            console.print(f"[green]✅ Token tracking enabled - Session: {token_tracker.session_id}[/green]")
+
+        agent = AgentWrapper(agent_options, token_tracker=token_tracker)
 
         # Create and start scanner
         scanner = MarketMoversScanner(
@@ -358,6 +384,11 @@ This is REQUIRED - your analysis is not complete until you call this tool.""",
         except KeyboardInterrupt:
             scanner.stop()
             console.print("\n[yellow]Scanner stopped by user[/yellow]")
+        finally:
+            # End token tracking session
+            if token_tracker:
+                await token_tracker.end_session()
+                console.print("[green]✅ Token tracking session ended[/green]")
 
     try:
         asyncio.run(run_scanner())
