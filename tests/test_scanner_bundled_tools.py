@@ -1,7 +1,7 @@
 """Tests for scanner bundled tools."""
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from agent.scanner.tools import fetch_technical_snapshot
+from agent.scanner.tools import fetch_technical_snapshot, fetch_sentiment_data
 
 
 @pytest.mark.asyncio
@@ -81,3 +81,43 @@ async def test_fetch_technical_snapshot_partial_failure():
         assert len(data["warnings"]) == 1
         assert "4h data fetch failed" in data["warnings"][0]
         assert data["success_count"] == 3  # 3 out of 4 succeeded
+
+
+@pytest.mark.asyncio
+async def test_fetch_sentiment_data_success():
+    """Test successful fetch of sentiment data."""
+    mock_query = "Bitcoin BTC price analysis catalysts"
+    mock_web_results = [
+        {"title": "BTC ETF Approved", "snippet": "SEC approves...", "url": "https://..."},
+        {"title": "Institutional Demand", "snippet": "Major funds...", "url": "https://..."}
+    ]
+    mock_summary = "Positive catalysts: ETF approval, institutional demand"
+
+    with patch('agent.scanner.tools.generate_sentiment_query_internal') as mock_query_fn, \
+         patch('agent.scanner.tools.execute_web_search_internal') as mock_search:
+
+        mock_query_fn.return_value = mock_query
+        mock_search.return_value = mock_web_results
+
+        result = await fetch_sentiment_data.handler({"symbol": "BTCUSDT", "context": "5% up"})
+
+        import json
+        data = json.loads(result["content"][0]["text"])
+
+        # Verify query generated
+        assert data["sentiment_query"] == mock_query
+
+        # Verify web results
+        assert data["web_results"] == mock_web_results
+
+        # Verify summary exists
+        assert "sentiment_summary" in data
+        assert len(data["sentiment_summary"]) > 0
+
+        # Verify sentiment score suggested
+        assert "suggested_sentiment_score" in data
+        assert 0 <= data["suggested_sentiment_score"] <= 30
+
+        # Verify no warnings
+        assert data["warnings"] == []
+        assert data["success"] is True
