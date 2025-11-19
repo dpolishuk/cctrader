@@ -269,23 +269,16 @@ def scan_movers(interval, portfolio):
         from agent.tools.sentiment import analyze_market_sentiment, detect_market_events
         from agent.scanner.tools import submit_trading_signal, fetch_technical_snapshot, fetch_sentiment_data
 
-        # Create MCP server with all trading tools including bundled tools
+        # Create MCP server with ONLY bundled tools for scanner agent
+        # Individual tools removed to prevent timeout issues from sequential calls
         trading_tools_server = create_sdk_mcp_server(
             name="trading_tools",
             version="1.0.0",
             tools=[
-                # Scanner bundled tools
+                # Scanner bundled tools only
                 fetch_technical_snapshot,
                 fetch_sentiment_data,
                 submit_trading_signal,
-
-                # Keep individual tools for other agents (not scanner)
-                fetch_market_data,
-                get_current_price,
-                analyze_technicals,
-                multi_timeframe_analysis,
-                analyze_market_sentiment,
-                detect_market_events,
             ]
         )
 
