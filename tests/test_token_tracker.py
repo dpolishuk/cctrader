@@ -43,10 +43,12 @@ async def test_start_session(tracker):
 @pytest.mark.asyncio
 async def test_record_usage(tracker):
     """Test recording token usage."""
-    # Mock agent result
+    # Mock ResultMessage with usage dict
     mock_result = Mock()
-    mock_result.usage.input_tokens = 1500
-    mock_result.usage.output_tokens = 800
+    mock_result.usage = {
+        'input_tokens': 1500,
+        'output_tokens': 800
+    }
     mock_result.model = "claude-sonnet-4-5"
 
     await tracker.record_usage(
@@ -67,8 +69,10 @@ async def test_get_rate_limit_status(tracker):
     """Test getting rate limit status."""
     # Record some usage
     mock_result = Mock()
-    mock_result.usage.input_tokens = 1000
-    mock_result.usage.output_tokens = 500
+    mock_result.usage = {
+        'input_tokens': 1000,
+        'output_tokens': 500
+    }
     mock_result.model = "claude-sonnet-4-5"
 
     for _ in range(5):

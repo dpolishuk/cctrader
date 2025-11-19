@@ -184,20 +184,19 @@ async def fetch_market_data_internal(symbol: str, timeframe: str, limit: int = 5
         "timeframe": timeframe,
         "limit": limit
     })
-    # Extract data from MCP response format
-    if "content" in result and len(result["content"]) > 0:
-        return json.loads(result["content"][0]["text"])
-    return {}
+    # Extract data from the 'data' field (not from content text)
+    if "data" in result and result["data"]:
+        return result["data"]
+    return []
 
 
 async def get_current_price_internal(symbol: str) -> float:
     """Internal function to get current price."""
     from src.agent.tools.market_data import get_current_price
     result = await get_current_price.handler({"symbol": symbol})
-    # Extract price from MCP response format
-    if "content" in result and len(result["content"]) > 0:
-        data = json.loads(result["content"][0]["text"])
-        return data.get("price", 0.0)
+    # Extract price from top-level field (not from content text)
+    if "price" in result:
+        return result["price"]
     return 0.0
 
 

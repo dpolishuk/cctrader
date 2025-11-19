@@ -7,6 +7,7 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     ClaudeSDKClient,
     AssistantMessage,
+    ResultMessage,
     TextBlock,
     ToolUseBlock,
     ToolResultBlock
@@ -18,16 +19,26 @@ logger = logging.getLogger(__name__)
 class AgentWrapper:
     """Wraps Claude Agent SDK to provide scanner-compatible interface."""
 
-    def __init__(self, agent_options: ClaudeAgentOptions, token_tracker: Optional[Any] = None):
+    def __init__(
+        self,
+        agent_options: ClaudeAgentOptions,
+        token_tracker: Optional[Any] = None,
+        session_manager: Optional[Any] = None,
+        operation_type: str = "scanner"
+    ):
         """
         Initialize wrapper.
 
         Args:
             agent_options: ClaudeAgentOptions with tools, system prompt, etc.
             token_tracker: Optional TokenTracker instance for tracking usage
+            session_manager: Optional SessionManager for session persistence
+            operation_type: Type of operation for session isolation (default: scanner)
         """
         self.agent_options = agent_options
         self.token_tracker = token_tracker
+        self.session_manager = session_manager
+        self.operation_type = operation_type
 
     async def run(self, prompt: str, symbol: str = None) -> Dict[str, Any]:
         """
@@ -58,12 +69,25 @@ class AgentWrapper:
         final_message = None
 
         try:
+            # Get existing session ID if session manager is available
+            session_id = None
+            if self.session_manager:
+                session_id = await self.session_manager.get_session_id(self.operation_type)
+                if session_id:
+                    logger.info(f"Resuming {self.operation_type} session: {session_id}")
+                else:
+                    logger.info(f"Starting new {self.operation_type} session")
+
             # Create agent client with configured options
             async with ClaudeSDKClient(options=self.agent_options) as client:
                 logger.info("Starting agent analysis")
 
-                # Send analysis prompt
-                await client.query(prompt)
+                # Send analysis prompt (with session resumption if available)
+                query_options = {}
+                if session_id:
+                    query_options['resume'] = session_id
+
+                await client.query(prompt, **query_options)
 
                 # Process agent messages (log for debugging and capture final message)
                 message_task = asyncio.create_task(
@@ -91,13 +115,21 @@ class AgentWrapper:
                         pass
 
                     # Record token usage if tracker is available
-                    if self.token_tracker and hasattr(self, '_last_message'):
+                    if self.token_tracker and hasattr(self, '_result_message'):
                         duration = time.time() - start_time
                         await self.token_tracker.record_usage(
-                            result=self._last_message,
+                            result=self._result_message,
                             operation_type="mover_analysis",
                             duration_seconds=duration,
                             metadata={"symbol": symbol or signal.get('symbol', 'unknown')}
+                        )
+
+                    # Save session ID if session manager is available and this was a new session
+                    if self.session_manager and hasattr(client, 'session_id') and client.session_id:
+                        await self.session_manager.save_session_id(
+                            self.operation_type,
+                            client.session_id,
+                            metadata=f'{{"symbol": "{symbol or signal.get("symbol", "unknown")}"}}'
                         )
 
                     return signal
@@ -142,9 +174,12 @@ class AgentWrapper:
                 message_type = type(message).__name__
                 logger.debug(f"📬 Received message type: {message_type}")
 
+                # Capture ResultMessage for token tracking
+                if isinstance(message, ResultMessage):
+                    self._result_message = message
+
                 if isinstance(message, AssistantMessage):
-                    # Capture for token tracking
-                    self._last_message = message
+                    # Track assistant messages for debugging
                     message_count += 1
 
                     # Count tools in this message

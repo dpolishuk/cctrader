@@ -401,13 +401,18 @@ Speed target: Complete analysis in under 30 seconds.""",
             include_partial_messages=True,
         )
 
+        # Initialize session manager for Claude Agent SDK sessions
+        from src.agent.session_manager import SessionManager
+        session_manager = SessionManager(db_path)
+        await session_manager.init_db()
+
         # Initialize token tracking if enabled
         token_tracker = None
         if config.TOKEN_TRACKING_ENABLED:
             # Ensure token tracking tables exist
-            async with aiosqlite.connect(db_path) as db:
-                await create_token_tracking_tables(db)
-                await db.commit()
+            async with aiosqlite.connect(db_path) as conn:
+                await create_token_tracking_tables(conn)
+                await conn.commit()
 
             # Initialize tracker
             token_tracker = TokenTracker(
@@ -417,7 +422,12 @@ Speed target: Complete analysis in under 30 seconds.""",
             await token_tracker.start_session()
             console.print(f"[green]✅ Token tracking enabled - Session: {token_tracker.session_id}[/green]")
 
-        agent = AgentWrapper(agent_options, token_tracker=token_tracker)
+        agent = AgentWrapper(
+            agent_options,
+            token_tracker=token_tracker,
+            session_manager=session_manager,
+            operation_type=SessionManager.SCANNER
+        )
 
         # Create and start scanner
         scanner = MarketMoversScanner(
@@ -589,6 +599,55 @@ def fetch_limits():
         else:
             console.print()
             console.print("[green]✓ Configuration is up to date[/green]")
+
+    asyncio.run(run())
+
+
+@cli.command()
+@click.option('--clear', 'clear_sessions', is_flag=True, help='Clear all sessions')
+@click.option('--clear-type', default=None, help='Clear specific operation type (scanner, analysis, etc.)')
+def sessions(clear_sessions, clear_type):
+    """Manage Claude Agent SDK sessions."""
+    async def run():
+        db_path = Path(os.getenv("DB_PATH", "./trading_data.db"))
+
+        from src.agent.session_manager import SessionManager
+
+        manager = SessionManager(db_path)
+        await manager.init_db()
+
+        if clear_sessions:
+            await manager.clear_all_sessions()
+            console.print("[green]✅ Cleared all sessions[/green]")
+        elif clear_type:
+            await manager.clear_session(clear_type)
+            console.print(f"[green]✅ Cleared {clear_type} session[/green]")
+        else:
+            # List sessions
+            sessions_data = await manager.list_sessions()
+
+            if not sessions_data:
+                console.print("[yellow]No active sessions[/yellow]")
+                return
+
+            table = Table(title="Claude Agent SDK Sessions")
+            table.add_column("Operation Type", style="cyan")
+            table.add_column("Session ID", style="green")
+            table.add_column("Created", style="blue")
+            table.add_column("Last Used", style="yellow")
+
+            for op_type, info in sessions_data.items():
+                table.add_row(
+                    op_type,
+                    info['session_id'][:16] + '...',  # Truncate for display
+                    info['created_at'],
+                    info['last_used_at']
+                )
+
+            console.print(table)
+            console.print(f"\n[dim]Total sessions: {len(sessions_data)}[/dim]")
+            console.print("[dim]Use --clear-type <type> to clear a specific session[/dim]")
+            console.print("[dim]Use --clear to clear all sessions[/dim]")
 
     asyncio.run(run())
 

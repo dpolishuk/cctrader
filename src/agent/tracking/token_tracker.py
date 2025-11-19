@@ -66,8 +66,13 @@ class TokenTracker:
             raise RuntimeError("Session not started")
 
         # Extract token counts from result
-        tokens_input = result.usage.input_tokens
-        tokens_output = result.usage.output_tokens
+        # ResultMessage has usage dict with input_tokens and output_tokens
+        usage = getattr(result, 'usage', {})
+        tokens_input = usage.get('input_tokens', 0)
+        tokens_output = usage.get('output_tokens', 0)
+
+        # Get model name - may be in result or metadata
+        model = getattr(result, 'model', metadata.get('model', 'unknown')) if metadata else getattr(result, 'model', 'unknown')
 
         # Calculate cost
         cost_usd = self.pricing.calculate_cost(tokens_input, tokens_output)
@@ -76,7 +81,7 @@ class TokenTracker:
         await self.db.record_token_usage(
             session_id=self.session_id,
             operation_type=operation_type,
-            model=result.model,
+            model=model,
             tokens_input=tokens_input,
             tokens_output=tokens_output,
             cost_usd=cost_usd,

@@ -41,8 +41,10 @@ async def test_complete_tracking_workflow(integration_setup):
     # Simulate multiple agent calls
     for i in range(3):
         mock_result = Mock()
-        mock_result.usage.input_tokens = 1000 + (i * 100)
-        mock_result.usage.output_tokens = 500 + (i * 50)
+        mock_result.usage = {
+            'input_tokens': 1000 + (i * 100),
+            'output_tokens': 500 + (i * 50)
+        }
         mock_result.model = "claude-sonnet-4-5"
 
         await tracker.record_usage(
@@ -84,8 +86,10 @@ async def test_cost_calculation_accuracy(integration_setup):
 
     # Known token counts
     mock_result = Mock()
-    mock_result.usage.input_tokens = 1_000_000  # 1M input
-    mock_result.usage.output_tokens = 500_000   # 0.5M output
+    mock_result.usage = {
+        'input_tokens': 1_000_000,  # 1M input
+        'output_tokens': 500_000    # 0.5M output
+    }
     mock_result.model = "claude-sonnet-4-5"
 
     await tracker.record_usage(

@@ -1,10 +1,34 @@
 """Configuration management."""
 import os
+import sqlite3
 from dataclasses import dataclass, field
 from typing import List
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+# Register custom datetime adapters for sqlite3 (Python 3.12 compatibility)
+def _adapt_datetime_iso(val):
+    """Adapt datetime.datetime to UTC ISO 8601 date."""
+    # Handle both timezone-aware and naive datetimes
+    if val.tzinfo is None:
+        # Assume naive datetime is UTC
+        val = val.replace(tzinfo=timezone.utc)
+    return val.astimezone(timezone.utc).isoformat()
+
+
+def _convert_datetime(val):
+    """Convert ISO 8601 datetime to datetime.datetime object."""
+    # Handle both bytes and string input
+    if isinstance(val, bytes):
+        val = val.decode()
+    return datetime.fromisoformat(val)
+
+
+sqlite3.register_adapter(datetime, _adapt_datetime_iso)
+sqlite3.register_converter("DATETIME", _convert_datetime)
 
 @dataclass
 class Config:
