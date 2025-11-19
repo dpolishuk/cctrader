@@ -499,5 +499,66 @@ def token_limits():
 
     asyncio.run(run())
 
+
+@cli.command()
+def fetch_limits():
+    """Fetch current Claude Code rate limits from documentation."""
+    async def run():
+        from agent.tracking.limit_fetcher import fetch_current_limits_from_docs, compare_with_current_config
+        from agent.config import config
+
+        console.print("[cyan]Fetching current Claude Code rate limits...[/cyan]")
+
+        limits = await fetch_current_limits_from_docs()
+
+        if not limits:
+            console.print("[yellow]Could not fetch limits from documentation[/yellow]")
+            console.print("Using current config values:")
+            console.print(f"  CLAUDE_HOURLY_LIMIT={config.CLAUDE_HOURLY_LIMIT}")
+            console.print(f"  CLAUDE_DAILY_LIMIT={config.CLAUDE_DAILY_LIMIT}")
+            return
+
+        comparison = compare_with_current_config(
+            limits,
+            config.CLAUDE_HOURLY_LIMIT,
+            config.CLAUDE_DAILY_LIMIT
+        )
+
+        console.print(f"[green]✓[/green] Fetched from {limits['source']}")
+        console.print(f"Last updated: {limits.get('last_updated', 'unknown')}")
+        console.print()
+
+        table = Table(title="Rate Limit Comparison")
+        table.add_column("Limit", style="cyan")
+        table.add_column("Current Config", style="yellow")
+        table.add_column("Documentation", style="green")
+
+        table.add_row(
+            "Hourly",
+            str(comparison['current']['hourly']),
+            str(comparison['fetched']['hourly'])
+        )
+        table.add_row(
+            "Daily",
+            str(comparison['current']['daily']),
+            str(comparison['fetched']['daily'])
+        )
+
+        console.print(table)
+
+        if comparison['needs_update']:
+            console.print()
+            console.print("[yellow]⚠ Configuration update recommended:[/yellow]")
+            console.print()
+            console.print("Add to .env:")
+            for key, value in comparison['recommendations'].items():
+                console.print(f"  {key}={value}")
+        else:
+            console.print()
+            console.print("[green]✓ Configuration is up to date[/green]")
+
+    asyncio.run(run())
+
+
 if __name__ == '__main__':
     cli()
