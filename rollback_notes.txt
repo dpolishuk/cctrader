@@ -1,0 +1,38 @@
+Scanner Timeout Fix - Rollback
+
+Date: 2025-11-19
+Reason: New prompt did not resolve timeout issue
+
+Observations from testing:
+- Agent completely ignored parallel execution instructions in prompt
+- Tool calls were sequential (one tool per message):
+  - Message #1: 1 tool (fetch_market_data for 15m)
+  - Message #2: 1 tool (fetch_market_data for 1h)
+  - Message #3: 1 tool (fetch_market_data for 4h)
+  - etc.
+- Agent never reached submit_trading_signal in any of 3 test cycles
+- All 3 cycles hit 45-second timeout without completing analysis
+- Success rate: 0/3 (0%) - same as before prompt change
+- Analysis time: 45+ seconds (unchanged)
+
+Key Finding - Prompt Engineering Insufficient:
+- Despite explicit instructions to "call tools in PARALLEL"
+- Despite showing exact pattern (Wave 1: 4 tools, Wave 2: 2 tools, Wave 3: 1 tool)
+- Despite SPEED REQUIREMENTS section emphasizing urgency
+- Agent SDK behavior appears to override prompt instructions for tool execution
+
+Pattern Observed:
+The agent consistently made single-tool calls across multiple messages instead of
+grouping tools together. This suggests the Claude Agent SDK may have built-in
+constraints or default behaviors that prevent parallel tool execution through
+prompt instructions alone.
+
+Next steps:
+- Investigate Claude Agent SDK documentation for explicit parallel execution APIs
+- Review SDK source code for tool execution batching capabilities
+- Consider alternative approaches:
+  1. SDK-level configuration for parallel tool calls
+  2. Custom tool execution wrapper that batches calls
+  3. Restructuring tools to reduce total call count
+  4. Hybrid approach: parallel-capable tools + sequential fallback
+- Consult with Anthropic SDK team about best practices for parallel execution

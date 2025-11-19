@@ -1,0 +1,97 @@
+Scanner Test Results - Tue Nov 19 12:17:30 UTC 2025
+==================================
+
+TEST SUMMARY:
+Status: FAILED - Agent still timing out after 45 seconds
+Test Duration: 3 minutes (3 scan cycles attempted)
+Success Rate: 0/3 (0%)
+
+FAILURE INDICATORS OBSERVED:
+❌ "Agent analysis timeout after 45 seconds" - 2 occurrences
+❌ Tool calls SEQUENTIAL (1 tool per message) - NOT parallel as designed
+❌ Never called submit_trading_signal - 0 occurrences
+❌ Analysis time: >45 seconds every time
+
+DETAILED ANALYSIS:
+
+Cycle 1 - APR/USDT (LONG):
+- Start: 2025-11-19 12:14:57,081
+- Timeout: 2025-11-19 12:15:42,082 (45 seconds)
+- Tool call pattern:
+  Message #1: text only (no tools)
+  Message #2: 1 tool - mcp__trading__fetch_market_data
+  Message #3: 1 tool - mcp__trading__fetch_market_data
+  Message #4: 1 tool - mcp__trading__fetch_market_data
+  Message #5: 1 tool - mcp__trading__get_current_price
+  Message #6: text only (no tools)
+  Message #7: 1 tool - mcp__trading__analyze_market_sentiment
+  Message #8: 1 tool - WebSearch
+  Message #9: text only (no tools)
+  Message #10: 1 tool - mcp__trading__analyze_technicals
+  Message #11: 1 tool - WebSearch
+  Message #12: text only (no tools)
+  Message #13: 1 tool - WebFetch
+- Result: TIMEOUT - Agent never called submit_trading_signal
+
+Cycle 2 - BETA/USDT (LONG):
+- Start: 2025-11-19 12:15:45,314
+- Timeout: 2025-11-19 12:16:30,315 (45 seconds)
+- Tool call pattern:
+  Message #1: text only (no tools)
+  Message #2-5: Sequential fetch_market_data calls (1 per message)
+  Message #6-8: Sequential analyze_technicals calls (1 per message)
+  Message #9-10: analyze_market_sentiment + WebSearch (still sequential)
+  Message #11: detect_market_events
+- Result: TIMEOUT - Agent never called submit_trading_signal
+
+Cycle 3 - SOON/USDT (LONG):
+- Start: 2025-11-19 12:16:33,510
+- Timeout: Not logged (test interrupted after 3 minutes)
+- Tool call pattern:
+  Message #1: text only (no tools)
+  Message #2-5: Sequential fetch_market_data calls (1 per message)
+  Message #6-8: Sequential analyze_technicals calls (1 per message)
+  Message #9-10: analyze_market_sentiment + WebSearch
+- Result: INCOMPLETE (test stopped before timeout)
+
+EXPECTED vs ACTUAL PATTERN:
+
+Expected (Parallel Waves):
+  Wave 1 - Message #1: 4 tools parallel (fetch_market_data x3, get_current_price)
+  Wave 2 - Message #2: 2 tools parallel (analyze_market_sentiment, web_search)
+  Wave 3 - Message #3: 1 tool (submit_trading_signal)
+
+Actual (Sequential Execution):
+  Message #1: text only (reasoning)
+  Messages #2-5: 1 tool each (sequential data fetching)
+  Message #6+: text + single tools (sequential analysis)
+  Never reaches: submit_trading_signal
+
+ROOT CAUSE ANALYSIS:
+
+The new prompt with "SPEED REQUIREMENTS" and "PARALLEL EXECUTION PATTERN" did NOT
+change the agent's behavior. The agent still:
+1. Ignores parallel execution instructions
+2. Calls tools one at a time (sequential)
+3. Adds excessive reasoning between tool calls
+4. Times out before reaching submit_trading_signal
+
+The agent appears to be ignoring the explicit parallel wave pattern instructions
+in the system prompt. It reads the instructions and then proceeds to execute
+sequentially anyway.
+
+CONCLUSION:
+
+The prompt optimization approach FAILED to resolve the timeout issue.
+Agent behavior is unchanged from the original sequential pattern.
+Timeout rate remains 100%.
+
+RECOMMENDATION:
+
+This approach (prompt restructuring) is insufficient. The agent SDK or model
+itself may not support forced parallel execution via prompt engineering alone.
+Need to investigate:
+1. Agent SDK configuration options for parallel tool calls
+2. Alternative prompt structures
+3. Programmatic control of tool call batching
+4. Different model or SDK version
