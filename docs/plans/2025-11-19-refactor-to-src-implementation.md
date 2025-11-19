@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Move agent/ to src/agent/ and update all imports from agent.* to src.agent.*
+**Goal:** Move agent/ to src/agent/ and update all imports from src.agent.* to src.agent.*
 
 **Architecture:** Structural refactoring with no logic changes. Uses git mv to preserve history, automated sed for bulk import updates, manual verification for critical files.
 
@@ -47,7 +47,7 @@ Expected: Merge succeeds, possibly with conflicts
 **Step 3: If conflicts occur, resolve them**
 
 Common conflict locations:
-- `agent/main.py` - Keep bundled tools version
+- `src/agent/main.py` - Keep bundled tools version
 - `.mcp.json` - Keep bundled tools version
 
 Run after resolving:
@@ -60,7 +60,7 @@ git merge --continue
 
 Run:
 ```bash
-python -m agent.main --help
+python -m src.agent.main --help
 pytest tests/test_scanner_bundled_tools.py -v
 ```
 
@@ -106,7 +106,7 @@ Expected: Back on refactor branch
 ## Task 3: Move agent/ to src/agent/
 
 **Files:**
-- Move: `agent/` → `src/agent/`
+- Move: `src/agent/` → `src/agent/`
 - Create: `src/__init__.py`
 
 **Step 1: Create src directory**
@@ -134,7 +134,7 @@ Run:
 git mv agent src/agent
 ```
 
-Expected: `agent/` moved to `src/agent/`, git tracks as rename
+Expected: `src/agent/` moved to `src/agent/`, git tracks as rename
 
 **Step 4: Verify move**
 
@@ -176,12 +176,12 @@ Expected: Commit succeeds with SHA
 
 Run:
 ```bash
-# Update "from agent." imports
+# Update "from src.agent." imports
 find src tests scripts -name "*.py" -type f 2>/dev/null | while read f; do
   sed -i 's/from agent\./from src.agent./g' "$f"
 done
 
-# Update "import agent." imports
+# Update "import src.agent." imports
 find src tests scripts -name "*.py" -type f 2>/dev/null | while read f; do
   sed -i 's/import agent\./import src.agent./g' "$f"
 done
@@ -227,8 +227,8 @@ git add -A
 git commit -m "refactor: update all imports to src.agent.*
 
 Automated update using sed:
-- from agent.* → from src.agent.*
-- import agent.* → import src.agent.*
+- from src.agent.* → from src.agent.*
+- import src.agent.* → import src.agent.*
 
 Applied to all Python files in src/, tests/, scripts/
 
@@ -364,7 +364,7 @@ Edit `README.md` to update all command examples:
 
 ```markdown
 # OLD
-python -m agent.main scan-movers --interval 60
+python -m src.agent.main scan-movers --interval 60
 
 # NEW
 python -m src.agent.main scan-movers --interval 60
@@ -414,7 +414,7 @@ For each file found, update code examples:
 
 ```markdown
 # OLD
-python -m agent.main scan-movers
+python -m src.agent.main scan-movers
 
 # NEW
 python -m src.agent.main scan-movers
@@ -422,11 +422,11 @@ python -m src.agent.main scan-movers
 
 **Step 3: Update architecture diagrams or references**
 
-Check for any architecture docs mentioning `agent/` structure:
+Check for any architecture docs mentioning `src/agent/` structure:
 
 Run:
 ```bash
-grep -r "agent/" docs/ --include="*.md" | grep -v "src/agent"
+grep -r "src/agent/" docs/ --include="*.md" | grep -v "src/agent"
 ```
 
 Update any outdated references
@@ -474,10 +474,10 @@ grep -r "python -m agent" scripts/ 2>/dev/null || echo "None found"
 
 **Step 3: Update scripts if needed**
 
-For shell scripts using `python -m agent.main`:
+For shell scripts using `python -m src.agent.main`:
 ```bash
 # OLD
-python -m agent.main scan-movers
+python -m src.agent.main scan-movers
 
 # NEW
 python -m src.agent.main scan-movers
@@ -694,9 +694,9 @@ Add to end of `docs/plans/2025-11-19-refactor-to-src-directory-design.md`:
 **Status:** ✅ COMPLETE
 
 **Changes:**
-- Moved: `agent/` → `src/agent/`
+- Moved: `src/agent/` → `src/agent/`
 - Updated: 30+ files with import changes
-- Entry point: `python -m agent.main` → `python -m src.agent.main`
+- Entry point: `python -m src.agent.main` → `python -m src.agent.main`
 
 **Verification:**
 - ✅ All module imports work

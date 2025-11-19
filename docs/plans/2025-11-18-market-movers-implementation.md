@@ -23,7 +23,7 @@ Before starting:
 ## Task 1: Create Scanner Configuration
 
 **Files:**
-- Create: `agent/scanner/config.py`
+- Create: `src/agent/scanner/config.py`
 - Test: `tests/test_scanner_config.py`
 
 **Step 1: Write failing test for scanner config**
@@ -31,7 +31,7 @@ Before starting:
 ```python
 # tests/test_scanner_config.py
 import pytest
-from agent.scanner.config import ScannerConfig
+from src.agent.scanner.config import ScannerConfig
 
 def test_scanner_config_defaults():
     """Test scanner configuration has correct defaults."""
@@ -131,7 +131,7 @@ git commit -m "feat(scanner): add scanner configuration module
 ## Task 2: Create Risk Configuration
 
 **Files:**
-- Create: `agent/scanner/risk_config.py`
+- Create: `src/agent/scanner/risk_config.py`
 - Test: `tests/test_risk_config.py`
 
 **Step 1: Write failing test for risk config**
@@ -139,7 +139,7 @@ git commit -m "feat(scanner): add scanner configuration module
 ```python
 # tests/test_risk_config.py
 import pytest
-from agent.scanner.risk_config import RiskConfig, ConfidenceTier
+from src.agent.scanner.risk_config import RiskConfig, ConfidenceTier
 
 def test_risk_config_defaults():
     """Test risk configuration has correct portfolio limits."""
@@ -292,7 +292,7 @@ git commit -m "feat(scanner): add risk management configuration
 ## Task 3: Create Futures Symbol Manager
 
 **Files:**
-- Create: `agent/scanner/symbol_manager.py`
+- Create: `src/agent/scanner/symbol_manager.py`
 - Test: `tests/test_symbol_manager.py`
 
 **Step 1: Write failing test for symbol manager**
@@ -301,7 +301,7 @@ git commit -m "feat(scanner): add risk management configuration
 # tests/test_symbol_manager.py
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from agent.scanner.symbol_manager import FuturesSymbolManager
+from src.agent.scanner.symbol_manager import FuturesSymbolManager
 
 @pytest.mark.asyncio
 async def test_refresh_symbols_filters_usdt_futures():
@@ -515,7 +515,7 @@ git commit -m "feat(scanner): add futures symbol manager
 ## Task 4: Create Momentum Scanner
 
 **Files:**
-- Create: `agent/scanner/momentum_scanner.py`
+- Create: `src/agent/scanner/momentum_scanner.py`
 - Test: `tests/test_momentum_scanner.py`
 
 **Step 1: Write failing test for momentum scanner**
@@ -524,7 +524,7 @@ git commit -m "feat(scanner): add futures symbol manager
 # tests/test_momentum_scanner.py
 import pytest
 from unittest.mock import AsyncMock
-from agent.scanner.momentum_scanner import MomentumScanner
+from src.agent.scanner.momentum_scanner import MomentumScanner
 
 @pytest.mark.asyncio
 async def test_scan_for_movers_identifies_gainers():
@@ -770,7 +770,7 @@ git commit -m "feat(scanner): add momentum scanner
 ## Task 5: Create Confidence Score Calculator
 
 **Files:**
-- Create: `agent/scanner/confidence.py`
+- Create: `src/agent/scanner/confidence.py`
 - Test: `tests/test_confidence.py`
 
 **Step 1: Write failing test for confidence calculator**
@@ -778,7 +778,7 @@ git commit -m "feat(scanner): add momentum scanner
 ```python
 # tests/test_confidence.py
 import pytest
-from agent.scanner.confidence import ConfidenceCalculator
+from src.agent.scanner.confidence import ConfidenceCalculator
 
 def test_calculate_technical_score():
     """Test technical analysis score calculation."""
@@ -1111,7 +1111,7 @@ git commit -m "feat(scanner): add confidence score calculator
 ## Task 6: Create Risk Validator
 
 **Files:**
-- Create: `agent/scanner/risk_validator.py`
+- Create: `src/agent/scanner/risk_validator.py`
 - Test: `tests/test_risk_validator.py`
 
 **Step 1: Write failing test for risk validator**
@@ -1120,8 +1120,8 @@ git commit -m "feat(scanner): add confidence score calculator
 # tests/test_risk_validator.py
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from agent.scanner.risk_validator import RiskValidator
-from agent.scanner.risk_config import RiskConfig
+from src.agent.scanner.risk_validator import RiskValidator
+from src.agent.scanner.risk_config import RiskConfig
 
 @pytest.mark.asyncio
 async def test_validate_all_checks_pass():
@@ -1448,7 +1448,7 @@ git commit -m "feat(scanner): add risk validation system
 ## Task 7: Create Agent Prompt Templates
 
 **Files:**
-- Create: `agent/scanner/prompts.py`
+- Create: `src/agent/scanner/prompts.py`
 - Test: `tests/test_prompts.py`
 
 **Step 1: Write failing test for prompt templates**
@@ -1456,7 +1456,7 @@ git commit -m "feat(scanner): add risk validation system
 ```python
 # tests/test_prompts.py
 import pytest
-from agent.scanner.prompts import PromptBuilder
+from src.agent.scanner.prompts import PromptBuilder
 
 def test_build_analysis_prompt():
     """Test building agent analysis prompt."""
@@ -1671,8 +1671,8 @@ git commit -m "feat(scanner): add agent prompt templates
 ## Task 8: Extend Database Schema for Market Movers
 
 **Files:**
-- Create: `agent/database/movers_schema.py`
-- Modify: `agent/database/paper_operations.py` (add movers methods)
+- Create: `src/agent/database/movers_schema.py`
+- Modify: `src/agent/database/paper_operations.py` (add movers methods)
 - Test: `tests/test_movers_database.py`
 
 **Step 1: Write failing test for movers database**
@@ -1682,8 +1682,8 @@ git commit -m "feat(scanner): add agent prompt templates
 import pytest
 import aiosqlite
 from pathlib import Path
-from agent.database.movers_schema import create_movers_tables
-from agent.database.paper_operations import PaperTradingDatabase
+from src.agent.database.movers_schema import create_movers_tables
+from src.agent.database.paper_operations import PaperTradingDatabase
 
 @pytest.mark.asyncio
 async def test_create_movers_tables(tmp_path):
@@ -1991,7 +1991,7 @@ git commit -m "feat(database): add market movers schema and operations
 ## Task 9: Create Main Scanner Loop
 
 **Files:**
-- Create: `agent/scanner/main_loop.py`
+- Create: `src/agent/scanner/main_loop.py`
 - Test: `tests/test_main_loop.py`
 
 Due to complexity, this will be implemented with integration test approach.
@@ -2002,9 +2002,9 @@ Due to complexity, this will be implemented with integration test approach.
 # tests/test_main_loop.py
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from agent.scanner.main_loop import MarketMoversScanner
-from agent.scanner.config import ScannerConfig
-from agent.scanner.risk_config import RiskConfig
+from src.agent.scanner.main_loop import MarketMoversScanner
+from src.agent.scanner.config import ScannerConfig
+from src.agent.scanner.risk_config import RiskConfig
 
 @pytest.mark.asyncio
 async def test_scanner_initialization():
@@ -2255,7 +2255,7 @@ git commit -m "feat(scanner): add main scanner loop scaffold
 ## Task 10: Integration with Existing CLI
 
 **Files:**
-- Modify: `agent/main.py` (add scanner command)
+- Modify: `src/agent/main.py` (add scanner command)
 - Test: Manual testing
 
 **Step 1: Add scanner command to CLI**
@@ -2264,8 +2264,8 @@ git commit -m "feat(scanner): add main scanner loop scaffold
 # agent/main.py (add this to existing CLI)
 
 # At top of file, add import:
-from agent.scanner.main_loop import MarketMoversScanner
-from agent.database.movers_schema import create_movers_tables
+from src.agent.scanner.main_loop import MarketMoversScanner
+from src.agent.database.movers_schema import create_movers_tables
 
 # Add new command in main():
 
@@ -2274,10 +2274,10 @@ from agent.database.movers_schema import create_movers_tables
 def scan_movers(interval):
     """Run market movers scanner."""
     import asyncio
-    from agent.tools.market_data import get_exchange
-    from agent.trading_agent import create_agent
-    from agent.paper_trading.portfolio_manager import PortfolioManager
-    from agent.database.paper_operations import PaperTradingDatabase
+    from src.agent.tools.market_data import get_exchange
+    from src.agent.trading_agent import create_agent
+    from src.agent.paper_trading.portfolio_manager import PortfolioManager
+    from src.agent.database.paper_operations import PaperTradingDatabase
     from pathlib import Path
 
     async def run_scanner():
@@ -2336,7 +2336,7 @@ cli.add_command(scan_movers)
 **Step 2: Test manually**
 
 ```bash
-python -m agent.main scan-movers --interval 60
+python -m src.agent.main scan-movers --interval 60
 ```
 
 Expected: Scanner starts, initializes symbol list, begins scan cycles

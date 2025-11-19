@@ -13,7 +13,7 @@
 ## Task 1: Create fetch_technical_snapshot Tool with Tests
 
 **Files:**
-- Modify: `agent/scanner/tools.py` (add new tool)
+- Modify: `src/agent/scanner/tools.py` (add new tool)
 - Create: `tests/test_scanner_bundled_tools.py`
 
 **Step 1: Write the failing test**
@@ -24,7 +24,7 @@ Create `tests/test_scanner_bundled_tools.py`:
 """Tests for scanner bundled tools."""
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from agent.scanner.tools import fetch_technical_snapshot
+from src.agent.scanner.tools import fetch_technical_snapshot
 
 
 @pytest.mark.asyncio
@@ -79,7 +79,7 @@ Expected: FAIL with "cannot import name 'fetch_technical_snapshot'" or "module h
 
 **Step 3: Write minimal implementation**
 
-Add to `agent/scanner/tools.py` (after the submit_trading_signal tool):
+Add to `src/agent/scanner/tools.py` (after the submit_trading_signal tool):
 
 ```python
 import asyncio
@@ -89,7 +89,7 @@ from typing import Dict, Any, List
 
 async def fetch_market_data_internal(symbol: str, timeframe: str, limit: int = 50) -> Dict[str, Any]:
     """Internal function to fetch market data."""
-    from agent.tools.market_data import fetch_market_data
+    from src.agent.tools.market_data import fetch_market_data
     result = await fetch_market_data({
         "symbol": symbol,
         "timeframe": timeframe,
@@ -104,7 +104,7 @@ async def fetch_market_data_internal(symbol: str, timeframe: str, limit: int = 5
 
 async def get_current_price_internal(symbol: str) -> float:
     """Internal function to get current price."""
-    from agent.tools.market_data import get_current_price
+    from src.agent.tools.market_data import get_current_price
     result = await get_current_price({"symbol": symbol})
     # Extract price from MCP response format
     if "content" in result and len(result["content"]) > 0:
@@ -200,7 +200,7 @@ async def fetch_technical_snapshot(args: Dict[str, Any]) -> Dict[str, Any]:
 
 **Step 4: Add tool import at top of file**
 
-Add to imports section in `agent/scanner/tools.py`:
+Add to imports section in `src/agent/scanner/tools.py`:
 
 ```python
 from claude_agent_sdk import tool
@@ -301,7 +301,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ## Task 3: Create fetch_sentiment_data Tool with Tests
 
 **Files:**
-- Modify: `agent/scanner/tools.py`
+- Modify: `src/agent/scanner/tools.py`
 - Modify: `tests/test_scanner_bundled_tools.py`
 
 **Step 1: Write the failing test**
@@ -357,12 +357,12 @@ Expected: FAIL with "cannot import name 'fetch_sentiment_data'"
 
 **Step 3: Write minimal implementation**
 
-Add to `agent/scanner/tools.py` (after fetch_technical_snapshot):
+Add to `src/agent/scanner/tools.py` (after fetch_technical_snapshot):
 
 ```python
 async def generate_sentiment_query_internal(symbol: str, context: str = "") -> str:
     """Internal function to generate sentiment query."""
-    from agent.tools.sentiment import analyze_market_sentiment
+    from src.agent.tools.sentiment import analyze_market_sentiment
     result = await analyze_market_sentiment({
         "symbol": symbol,
         "context": context
@@ -508,19 +508,19 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ## Task 4: Update Scanner MCP Server Configuration
 
 **Files:**
-- Modify: `agent/main.py:273-304`
+- Modify: `src/agent/main.py:273-304`
 
 **Step 1: Import bundled tools**
 
-Add to imports section in `agent/main.py` (around line 270):
+Add to imports section in `src/agent/main.py` (around line 270):
 
 ```python
-from agent.scanner.tools import submit_trading_signal, fetch_technical_snapshot, fetch_sentiment_data
+from src.agent.scanner.tools import submit_trading_signal, fetch_technical_snapshot, fetch_sentiment_data
 ```
 
 **Step 2: Update tools list**
 
-Modify lines 273-284 in `agent/main.py`:
+Modify lines 273-284 in `src/agent/main.py`:
 
 ```python
         # Create MCP server with all trading tools including bundled tools
@@ -546,7 +546,7 @@ Modify lines 273-284 in `agent/main.py`:
 
 **Step 3: Update allowed_tools list**
 
-Modify lines 295-304 in `agent/main.py`:
+Modify lines 295-304 in `src/agent/main.py`:
 
 ```python
             # Allowed tools - scanner uses only bundled tools
@@ -566,7 +566,7 @@ Expected: No errors
 
 **Step 5: Verify import**
 
-Run: `python -c "from agent.main import cli; print('OK')"`
+Run: `python -c "from src.agent.main import cli; print('OK')"`
 
 Expected: Output "OK"
 
@@ -594,7 +594,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ## Task 5: Update System Prompt
 
 **Files:**
-- Modify: `agent/main.py:306-338` (system_prompt section)
+- Modify: `src/agent/main.py:306-338` (system_prompt section)
 
 **Step 1: Read current prompt location**
 
@@ -687,7 +687,7 @@ Expected: All tests PASS (3 tests total)
 
 If failures occur:
 - Read error message
-- Fix implementation in `agent/scanner/tools.py`
+- Fix implementation in `src/agent/scanner/tools.py`
 - Re-run tests
 - Commit fix with message: "fix: [description of fix]"
 
@@ -710,7 +710,7 @@ Expected: Existing tests still pass (new failures unrelated to bundled tools are
 Run:
 ```bash
 cd /home/deepol/work/cctrader/.worktrees/scanner-timeout
-python -m agent.main scan-movers --interval 60 2>&1 | tee /tmp/bundled_tools_test.log
+python -m src.agent.main scan-movers --interval 60 2>&1 | tee /tmp/bundled_tools_test.log
 ```
 
 Let it run for 2-3 complete cycles (2-3 minutes), then Ctrl+C
@@ -745,7 +745,7 @@ Bundled Tools Test Results - $(date)
 =====================================
 
 Test command:
-python -m agent.main scan-movers --interval 60
+python -m src.agent.main scan-movers --interval 60
 
 Duration: [X minutes, Y cycles]
 
@@ -939,7 +939,7 @@ git rebase -i HEAD~[number-of-commits-to-rollback]
 
 **Step 3: Verify revert**
 
-Run: `python -c "from agent.main import cli; print('Reverted successfully')"`
+Run: `python -c "from src.agent.main import cli; print('Reverted successfully')"`
 
 Expected: Import succeeds
 

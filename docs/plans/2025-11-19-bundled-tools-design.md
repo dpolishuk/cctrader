@@ -114,7 +114,7 @@ async def fetch_technical_snapshot(symbol: str) -> Dict[str, Any]:
 - Build warnings list for failed operations
 - Always return a valid dict (never raise)
 
-**Location:** `agent/scanner/tools.py` (alongside submit_trading_signal)
+**Location:** `src/agent/scanner/tools.py` (alongside submit_trading_signal)
 
 ### Tool 2: fetch_sentiment_data
 
@@ -185,11 +185,11 @@ async def fetch_sentiment_data(symbol: str, context: str = "") -> Dict[str, Any]
 - If both fail: Return minimal data with neutral sentiment score
 - Never raise exceptions
 
-**Location:** `agent/scanner/tools.py`
+**Location:** `src/agent/scanner/tools.py`
 
 ## System Prompt Updates
 
-**Location:** `agent/main.py` lines 307-338 (system_prompt in ClaudeAgentOptions)
+**Location:** `src/agent/main.py` lines 307-338 (system_prompt in ClaudeAgentOptions)
 
 **New Prompt:**
 
@@ -243,7 +243,7 @@ Speed target: Complete analysis in under 30 seconds.
 
 ## MCP Server and Tools Configuration
 
-**Location:** `agent/main.py` lines 273-304
+**Location:** `src/agent/main.py` lines 273-304
 
 **Changes to tools list:**
 
@@ -377,7 +377,7 @@ allowed_tools=[
 1. Run scanner for 2-3 cycles:
    ```bash
    cd /home/deepol/work/cctrader/.worktrees/scanner-timeout
-   python -m agent.main scan-movers --interval 60 2>&1 | tee /tmp/bundled_test.log
+   python -m src.agent.main scan-movers --interval 60 2>&1 | tee /tmp/bundled_test.log
    ```
 
 2. Check logs for expected pattern:
@@ -456,20 +456,20 @@ allowed_tools=[
 
 **Backup files:**
 - Design doc: `docs/plans/2025-11-19-bundled-tools-design.md`
-- Old tools still exist in `agent/tools/` for other agents
+- Old tools still exist in `src/agent/tools/` for other agents
 - Git history preserves all previous working states
 
 ## Implementation Steps
 
 1. **Create bundled tools:**
-   - Add `fetch_technical_snapshot` to `agent/scanner/tools.py`
-   - Add `fetch_sentiment_data` to `agent/scanner/tools.py`
-   - Import necessary functions from `agent/tools/market_data.py`
+   - Add `fetch_technical_snapshot` to `src/agent/scanner/tools.py`
+   - Add `fetch_sentiment_data` to `src/agent/scanner/tools.py`
+   - Import necessary functions from `src/agent/tools/market_data.py`
 
 2. **Update scanner configuration:**
-   - Modify `agent/main.py` lines 273-284 (tools list)
-   - Modify `agent/main.py` lines 295-304 (allowed_tools)
-   - Modify `agent/main.py` lines 307-338 (system_prompt)
+   - Modify `src/agent/main.py` lines 273-284 (tools list)
+   - Modify `src/agent/main.py` lines 295-304 (allowed_tools)
+   - Modify `src/agent/main.py` lines 307-338 (system_prompt)
 
 3. **Write unit tests:**
    - Create `tests/test_scanner_bundled_tools.py`

@@ -237,7 +237,7 @@ Run scanner for 1-2 cycles and check logs for:
    - Commit: "feat(scanner): optimize agent prompt for parallel execution"
 
 3. **Test with scanner:**
-   - Run: `python -m agent.main scan-movers --interval 60`
+   - Run: `python -m src.agent.main scan-movers --interval 60`
    - Monitor logs for 2-3 scan cycles
    - Verify tool call pattern and timing
 

@@ -13,7 +13,7 @@ The paper trading system provides realistic trade simulation with:
 ### 1. Create a Portfolio
 
 ```bash
-python -m agent.main create-portfolio \
+python -m src.agent.main create-portfolio \
   --name "my_strategy" \
   --capital 100000 \
   --mode realistic
@@ -22,7 +22,7 @@ python -m agent.main create-portfolio \
 ### 2. Start Paper Trading
 
 ```bash
-python -m agent.main paper-monitor \
+python -m src.agent.main paper-monitor \
   --symbol BTC/USDT \
   --portfolio my_strategy \
   --interval 300
@@ -31,7 +31,7 @@ python -m agent.main paper-monitor \
 ### 3. View Portfolio Status
 
 ```bash
-python -m agent.main paper-status --name my_strategy
+python -m src.agent.main paper-status --name my_strategy
 ```
 
 ## Execution Modes
@@ -69,7 +69,7 @@ Trading automatically halted when:
 
 Reset with:
 ```bash
-python -m agent.main reset-breaker --portfolio my_strategy
+python -m src.agent.main reset-breaker --portfolio my_strategy
 ```
 
 ## Portfolio Audit Dashboard
@@ -85,7 +85,7 @@ The dashboard shows:
 ## Integration Example
 
 ```python
-from agent.trading_agent import TradingAgent
+from src.agent.trading_agent import TradingAgent
 
 # Create agent in paper trading mode
 agent = TradingAgent(
@@ -103,7 +103,7 @@ await agent.analyze_market()
 Default risk limits can be customized when creating a portfolio:
 
 ```python
-from agent.database.paper_operations import PaperTradingDatabase
+from src.agent.database.paper_operations import PaperTradingDatabase
 
 db = PaperTradingDatabase(db_path)
 
@@ -193,7 +193,7 @@ The paper trading system uses 6 dedicated tables:
 Create a new paper trading portfolio.
 
 ```bash
-python -m agent.main create-portfolio --name PORTFOLIO_NAME [OPTIONS]
+python -m src.agent.main create-portfolio --name PORTFOLIO_NAME [OPTIONS]
 
 Options:
   --name TEXT                 Portfolio name [required]
@@ -206,7 +206,7 @@ Options:
 Start continuous market monitoring in paper trading mode.
 
 ```bash
-python -m agent.main paper-monitor [OPTIONS]
+python -m src.agent.main paper-monitor [OPTIONS]
 
 Options:
   --symbol TEXT              Trading pair symbol (default: BTC/USDT)
@@ -218,14 +218,14 @@ Options:
 Show paper trading portfolio status and audit dashboard.
 
 ```bash
-python -m agent.main paper-status --name PORTFOLIO_NAME
+python -m src.agent.main paper-status --name PORTFOLIO_NAME
 ```
 
 ### reset-breaker
 Manually reset circuit breaker to resume trading.
 
 ```bash
-python -m agent.main reset-breaker --portfolio PORTFOLIO_NAME
+python -m src.agent.main reset-breaker --portfolio PORTFOLIO_NAME
 ```
 
 ## MCP Tools
@@ -263,35 +263,35 @@ Average difference between signal price and execution price. Lower is better.
 ### Initial Setup
 ```bash
 # Create portfolio
-python -m agent.main create-portfolio --name btc_momentum --capital 50000 --mode realistic
+python -m src.agent.main create-portfolio --name btc_momentum --capital 50000 --mode realistic
 
 # Check it was created
-python -m agent.main paper-status --name btc_momentum
+python -m src.agent.main paper-status --name btc_momentum
 ```
 
 ### Running Strategy
 ```bash
 # Start paper trading
-python -m agent.main paper-monitor --symbol BTC/USDT --portfolio btc_momentum --interval 300
+python -m src.agent.main paper-monitor --symbol BTC/USDT --portfolio btc_momentum --interval 300
 ```
 
 ### Monitoring
 ```bash
 # Check status periodically (in another terminal)
-python -m agent.main paper-status --name btc_momentum
+python -m src.agent.main paper-status --name btc_momentum
 ```
 
 ### Recovery
 ```bash
 # If circuit breaker triggers
-python -m agent.main reset-breaker --portfolio btc_momentum
+python -m src.agent.main reset-breaker --portfolio btc_momentum
 ```
 
 ## Advanced Topics
 
 ### Custom Execution Modes
 
-You can modify execution behavior by editing `agent/paper_trading/execution_engine.py`:
+You can modify execution behavior by editing `src/agent/paper_trading/execution_engine.py`:
 
 - Adjust slippage parameters in `_realistic_execution()`
 - Customize partial fill probability
@@ -299,7 +299,7 @@ You can modify execution behavior by editing `agent/paper_trading/execution_engi
 
 ### Custom Risk Rules
 
-Extend the risk manager in `agent/paper_trading/risk_manager.py`:
+Extend the risk manager in `src/agent/paper_trading/risk_manager.py`:
 
 ```python
 async def _check_custom_rule(self) -> Tuple[bool, Optional[str]]:
@@ -315,7 +315,7 @@ Then call it in `validate_trade()`.
 Access detailed metrics via database:
 
 ```python
-from agent.database.paper_operations import PaperTradingDatabase
+from src.agent.database.paper_operations import PaperTradingDatabase
 
 db = PaperTradingDatabase(db_path)
 trades = await db.get_trade_history(portfolio_id, limit=1000)

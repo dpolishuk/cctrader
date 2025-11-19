@@ -29,7 +29,7 @@ Add comprehensive token consumption tracking across the entire trading agent app
 
 ### Core Components
 
-#### 1. Token Tracker Module (`agent/tracking/`)
+#### 1. Token Tracker Module (`src/agent/tracking/`)
 
 **TokenTracker Class** - Singleton that wraps Claude Agent SDK usage
 - Intercepts all agent calls to capture token metrics
@@ -100,7 +100,7 @@ CREATE TABLE rate_limit_tracking (
 
 #### 3. Database Operations
 
-**TokenDatabase Class** (`agent/database/token_operations.py`)
+**TokenDatabase Class** (`src/agent/database/token_operations.py`)
 - `record_token_usage()` - Insert usage record, update session, increment rate limit counters
 - `get_hourly_usage()` - Aggregate last hour
 - `get_daily_usage()` - Aggregate last 24 hours
@@ -144,8 +144,8 @@ class TokenTrackingAgent:
 ```
 
 **Apply wrapper to:**
-- `TradingAgent` in `agent/trading_agent.py`
-- `AgentWrapper` in `agent/scanner/agent_wrapper.py`
+- `TradingAgent` in `src/agent/trading_agent.py`
+- `AgentWrapper` in `src/agent/scanner/agent_wrapper.py`
 - Any new agent instantiations
 
 ## User Interface
@@ -178,9 +178,9 @@ class TokenTrackingAgent:
 
 #### 1. `token-stats` - Usage reports
 ```bash
-python -m agent.main token-stats --period hourly
-python -m agent.main token-stats --period daily --operation scanner
-python -m agent.main token-stats --session <session-id>
+python -m src.agent.main token-stats --period hourly
+python -m src.agent.main token-stats --period daily --operation scanner
+python -m src.agent.main token-stats --session <session-id>
 ```
 
 **Output:**
@@ -191,7 +191,7 @@ python -m agent.main token-stats --session <session-id>
 
 #### 2. `token-limits` - Rate limit status
 ```bash
-python -m agent.main token-limits
+python -m src.agent.main token-limits
 ```
 
 **Output:**
@@ -202,7 +202,7 @@ python -m agent.main token-limits
 
 #### 3. `fetch-limits` - Get latest Claude Code limits
 ```bash
-python -m agent.main fetch-limits
+python -m src.agent.main fetch-limits
 ```
 
 **Behavior:**
@@ -215,9 +215,9 @@ python -m agent.main fetch-limits
 
 #### 4. Enhanced existing commands
 ```bash
-python -m agent.main analyze --symbol BTC/USDT --show-tokens
-python -m agent.main monitor --symbol BTC/USDT --show-tokens
-python -m agent.main scan-movers --show-tokens
+python -m src.agent.main analyze --symbol BTC/USDT --show-tokens
+python -m src.agent.main monitor --symbol BTC/USDT --show-tokens
+python -m src.agent.main scan-movers --show-tokens
 ```
 
 Adds token usage panel to existing command output.
@@ -246,7 +246,7 @@ TOKEN_CRITICAL_THRESHOLD=80
 TOKEN_HISTORY_DAYS=90  # How long to keep detailed records
 ```
 
-### Config Class Updates (`agent/config.py`)
+### Config Class Updates (`src/agent/config.py`)
 
 ```python
 @dataclass
@@ -275,7 +275,7 @@ On startup, validate:
 ## Implementation Plan
 
 ### Phase 1: Core Infrastructure
-- Create `agent/tracking/` module structure
+- Create `src/agent/tracking/` module structure
 - Implement `TokenTracker` class
 - Implement pricing calculator utility
 - Add database schema migration
@@ -334,20 +334,20 @@ On startup, validate:
 ## Files to Create/Modify
 
 ### New Files
-- `agent/tracking/__init__.py`
-- `agent/tracking/token_tracker.py` - Core tracker class
-- `agent/tracking/pricing.py` - Cost calculations
-- `agent/tracking/display.py` - Rich console components
-- `agent/database/token_schema.py` - Database schema
-- `agent/database/token_operations.py` - Database operations
+- `src/agent/tracking/__init__.py`
+- `src/agent/tracking/token_tracker.py` - Core tracker class
+- `src/agent/tracking/pricing.py` - Cost calculations
+- `src/agent/tracking/display.py` - Rich console components
+- `src/agent/database/token_schema.py` - Database schema
+- `src/agent/database/token_operations.py` - Database operations
 - `tests/test_token_tracking.py` - Unit tests
 - `tests/test_token_pricing.py` - Pricing tests
 
 ### Modified Files
-- `agent/trading_agent.py` - Add token tracking wrapper
-- `agent/scanner/agent_wrapper.py` - Add token tracking
-- `agent/main.py` - Add new CLI commands
-- `agent/config.py` - Add token tracking config
+- `src/agent/trading_agent.py` - Add token tracking wrapper
+- `src/agent/scanner/agent_wrapper.py` - Add token tracking
+- `src/agent/main.py` - Add new CLI commands
+- `src/agent/config.py` - Add token tracking config
 - `.env.example` - Add token tracking variables
 - `README.md` - Document token tracking features
 

@@ -2,14 +2,14 @@
 
 **Date:** 2025-11-19
 **Status:** Approved
-**Goal:** Reorganize codebase by moving `agent/` to `src/agent/` with updated import paths
+**Goal:** Reorganize codebase by moving `src/agent/` to `src/agent/` with updated import paths
 
 ## Overview and Strategy
 
 **Refactoring Scope:**
-- Move: `agent/` directory → `src/agent/`
+- Move: `src/agent/` directory → `src/agent/`
 - Update: All imports from `agent.*` → `src.agent.*`
-- Update: Entry point from `python -m agent.main` → `python -m src.agent.main`
+- Update: Entry point from `python -m src.agent.main` → `python -m src.agent.main`
 - Keep at root: `tests/`, `docs/`, `scripts/`, config files
 
 **Pre-requisite Step:** Merge `fix/scanner-timeout` worktree into main before starting refactoring. This ensures we refactor the final codebase with bundled tools included.
@@ -55,20 +55,20 @@ git merge fix/scanner-timeout
 
 **Expected merge contents:**
 - 11 commits from bundled tools work
-- New files: `agent/scanner/tools.py`, `tests/test_scanner_bundled_tools.py`
-- Modified: `agent/main.py`, `agent/scanner/agent_wrapper.py`
+- New files: `src/agent/scanner/tools.py`, `tests/test_scanner_bundled_tools.py`
+- Modified: `src/agent/main.py`, `src/agent/scanner/agent_wrapper.py`
 - Changes: Bundled tools + 120s timeout
 
 **Conflict Resolution:**
-If conflicts occur (likely in `agent/main.py` or `.mcp.json`):
+If conflicts occur (likely in `src/agent/main.py` or `.mcp.json`):
 - Prioritize bundled tools version (worktree changes)
 - Keep both import statements if different
-- Verify with: `python -m agent.main --help` after merge
+- Verify with: `python -m src.agent.main --help` after merge
 
 **Verification After Merge:**
 1. Run bundled tools tests: `pytest tests/test_scanner_bundled_tools.py -v` (should pass 4/4)
-2. Check scanner runs: `python -m agent.main scan-movers --help` (should work)
-3. Verify no broken imports: `python -c "from agent.main import cli"`
+2. Check scanner runs: `python -m src.agent.main scan-movers --help` (should work)
+3. Verify no broken imports: `python -c "from src.agent.main import cli"`
 
 **Why merge first:**
 - Ensures refactoring includes all latest code
@@ -112,9 +112,9 @@ Files to update:
 **Import pattern changes:**
 ```python
 # OLD
-from agent.tools.market_data import fetch_market_data
-from agent.scanner.agent_wrapper import AgentWrapper
-from agent.database.models import Signal
+from src.agent.tools.market_data import fetch_market_data
+from src.agent.scanner.agent_wrapper import AgentWrapper
+from src.agent.database.models import Signal
 
 # NEW
 from src.agent.tools.market_data import fetch_market_data
@@ -126,8 +126,8 @@ from src.agent.database.models import Signal
 
 ```python
 # OLD
-from agent.scanner.tools import fetch_technical_snapshot
-import agent.main
+from src.agent.scanner.tools import fetch_technical_snapshot
+import src.agent.main
 
 # NEW
 from src.agent.scanner.tools import fetch_technical_snapshot
@@ -158,7 +158,7 @@ find src tests scripts -name "*.py" -type f -exec sed -i 's/import agent\./impor
 
 ```bash
 # OLD
-python -m agent.main scan-movers --interval 60
+python -m src.agent.main scan-movers --interval 60
 
 # NEW
 python -m src.agent.main scan-movers --interval 60
@@ -188,7 +188,7 @@ Update any shell scripts that invoke the agent:
   "mcpServers": {
     "trading": {
       "command": "python",
-      "args": ["-m", "src.agent.main"]  // Updated from agent.main
+      "args": ["-m", "src.agent.main"]  // Updated from src.agent.main
     }
   }
 }

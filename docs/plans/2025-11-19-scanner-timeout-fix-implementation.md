@@ -13,11 +13,11 @@
 ## Task 1: Backup Current Prompt
 
 **Files:**
-- Modify: `agent/main.py:306-338`
+- Modify: `src/agent/main.py:306-338`
 
 **Step 1: Add comment block with old prompt**
 
-Add before line 306 in `agent/main.py`:
+Add before line 306 in `src/agent/main.py`:
 
 ```python
 # ORIGINAL PROMPT (backup before optimization)
@@ -33,7 +33,7 @@ system_prompt="""...
 
 **Step 2: Verify file still loads**
 
-Run: `python -c "import agent.main"`
+Run: `python -c "import src.agent.main"`
 
 Expected: No import errors
 
@@ -54,7 +54,7 @@ Addresses timeout issue where agent takes 45s+ without calling submit_trading_si
 ## Task 2: Replace System Prompt
 
 **Files:**
-- Modify: `agent/main.py:306-338`
+- Modify: `src/agent/main.py:306-338`
 
 **Step 1: Replace prompt content**
 
@@ -123,7 +123,7 @@ Expected: No syntax errors
 
 **Step 3: Verify import still works**
 
-Run: `python -c "from agent.main import cli; print('OK')"`
+Run: `python -c "from src.agent.main import cli; print('OK')"`
 
 Expected: Output "OK"
 
@@ -160,7 +160,7 @@ Expected impact: 45s+ → 25-35s analysis time, 0% → 100% success rate
 
 ```bash
 # Terminal 1: Run scanner with short interval
-python -m agent.main scan-movers --interval 60 2>&1 | tee /tmp/scanner_test.log
+python -m src.agent.main scan-movers --interval 60 2>&1 | tee /tmp/scanner_test.log
 
 # Let it run for 2-3 complete scan cycles (2-3 minutes)
 # Then Ctrl+C to stop
@@ -323,7 +323,7 @@ Implementation complete. Use `finishing-a-development-branch` skill to:
 ## Task 6: Rollback (Only if Task 4 = ROLLBACK)
 
 **Files:**
-- Revert: `agent/main.py`
+- Revert: `src/agent/main.py`
 
 **Step 1: Revert prompt change**
 
@@ -336,7 +336,7 @@ git revert <commit-sha>
 **Step 2: Verify revert**
 
 ```bash
-python -c "import agent.main; print('Reverted successfully')"
+python -c "import src.agent.main; print('Reverted successfully')"
 ```
 
 **Step 3: Document failure**
