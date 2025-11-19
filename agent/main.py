@@ -40,14 +40,33 @@ def monitor(symbol, interval):
 
 @cli.command()
 @click.option('--symbol', default='BTC/USDT', help='Trading pair symbol')
+@click.option('--show-tokens', is_flag=True, help='Display token usage metrics')
 @click.argument('query', required=False)
-def analyze(symbol, query):
+def analyze(symbol, show_tokens, query):
     """Run a single market analysis."""
     async def run():
         agent = TradingAgent(symbol=symbol)
         await agent.initialize()
         try:
             await agent.analyze_market(query=query)
+
+            # Display token usage if requested
+            if show_tokens and agent.token_tracker:
+                from agent.tracking.display import TokenDisplay
+
+                display = TokenDisplay()
+                session_stats = await agent.token_tracker.get_session_stats()
+                rate_limits = await agent.token_tracker.get_rate_limit_status()
+
+                # Get last usage record for current request
+                # Use session stats to display aggregate info
+                current_request = {
+                    'tokens_input': session_stats.get('total_tokens_input', 0),
+                    'tokens_output': session_stats.get('total_tokens_output', 0),
+                    'cost': session_stats.get('total_cost_usd', 0.0)
+                }
+
+                display.display_usage_panel(current_request, session_stats, rate_limits)
         finally:
             await agent.cleanup()
 
