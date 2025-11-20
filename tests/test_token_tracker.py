@@ -142,3 +142,46 @@ async def test_interval_initialization_on_start_session(tmp_path):
 
     # Clean up
     await tracker.end_session()
+
+
+@pytest.mark.asyncio
+async def test_interval_accumulation(tmp_path):
+    """Test token usage accumulates in current interval."""
+    db_path = tmp_path / "test.db"
+
+    # Initialize database schema
+    import aiosqlite
+    async with aiosqlite.connect(db_path) as db:
+        await create_token_tracking_tables(db)
+        await db.commit()
+
+    tracker = TokenTracker(db_path=db_path, operation_mode="test")
+
+    await tracker.start_session()
+
+    # Create mock result with usage
+    class MockResult:
+        usage = {'input_tokens': 100, 'output_tokens': 50}
+        model = 'claude-3-5-sonnet-20241022'
+
+    result = MockResult()
+
+    # Record usage
+    await tracker.record_usage(result, operation_type="test")
+
+    # Check accumulation
+    assert tracker.current_interval['tokens_input'] == 100
+    assert tracker.current_interval['tokens_output'] == 50
+    assert tracker.current_interval['requests'] == 1
+    assert tracker.current_interval['cost'] > 0  # Should have calculated cost
+
+    # Record another usage
+    await tracker.record_usage(result, operation_type="test")
+
+    # Check accumulation continues
+    assert tracker.current_interval['tokens_input'] == 200
+    assert tracker.current_interval['tokens_output'] == 100
+    assert tracker.current_interval['requests'] == 2
+
+    # Clean up
+    await tracker.end_session()

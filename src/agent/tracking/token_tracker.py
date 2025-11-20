@@ -113,6 +113,12 @@ class TokenTracker:
             metadata=metadata
         )
 
+        # Accumulate to current interval
+        self.current_interval['tokens_input'] += tokens_input
+        self.current_interval['tokens_output'] += tokens_output
+        self.current_interval['cost'] += cost_usd
+        self.current_interval['requests'] += 1
+
     async def get_session_stats(self) -> Dict[str, Any]:
         """
         Get current session statistics.
