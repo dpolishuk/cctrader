@@ -396,6 +396,110 @@ class PaperTradingDatabase:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 
+    async def get_symbol_pnl_summary(
+        self,
+        portfolio_id: int,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        min_trades: int = 0
+    ) -> List[Dict[str, Any]]:
+        """
+        Get P&L summary aggregated by symbol.
+
+        Args:
+            portfolio_id: Portfolio ID
+            start_date: Filter trades after this date (optional)
+            end_date: Filter trades before this date (optional)
+            min_trades: Minimum trade count to include symbol (default: 0)
+
+        Returns:
+            List of dicts with:
+            - symbol: str
+            - total_pnl: float (realized + unrealized)
+            - realized_pnl: float
+            - unrealized_pnl: float
+            - trade_count: int
+            - win_rate: float (0-100)
+            - avg_pnl: float
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+
+            # Build date filter
+            date_filter = ""
+            params = [portfolio_id, portfolio_id]
+            if start_date:
+                date_filter += " AND t.executed_at >= ?"
+                params.insert(1, start_date.isoformat())
+            if end_date:
+                date_filter += " AND t.executed_at <= ?"
+                params.insert(2 if start_date else 1, end_date.isoformat())
+
+            params.append(min_trades)
+
+            query = f"""
+            WITH realized AS (
+                SELECT
+                    symbol,
+                    SUM(realized_pnl) as realized_pnl,
+                    COUNT(*) as trade_count,
+                    SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as winning_trades
+                FROM paper_trades t
+                WHERE portfolio_id = ?
+                  AND realized_pnl IS NOT NULL
+                  {date_filter}
+                GROUP BY symbol
+            ),
+            unrealized AS (
+                SELECT
+                    symbol,
+                    SUM(unrealized_pnl) as unrealized_pnl
+                FROM paper_positions
+                WHERE portfolio_id = ?
+                  AND is_open = 1
+                GROUP BY symbol
+            ),
+            combined AS (
+                SELECT
+                    COALESCE(r.symbol, u.symbol) as symbol,
+                    COALESCE(r.realized_pnl, 0) as realized_pnl,
+                    COALESCE(u.unrealized_pnl, 0) as unrealized_pnl,
+                    COALESCE(r.realized_pnl, 0) + COALESCE(u.unrealized_pnl, 0) as total_pnl,
+                    COALESCE(r.trade_count, 0) as trade_count,
+                    CASE
+                        WHEN r.trade_count > 0
+                        THEN CAST(r.winning_trades AS REAL) / r.trade_count * 100
+                        ELSE 0
+                    END as win_rate,
+                    CASE
+                        WHEN r.trade_count > 0
+                        THEN r.realized_pnl / r.trade_count
+                        ELSE 0
+                    END as avg_pnl
+                FROM realized r
+                LEFT JOIN unrealized u ON r.symbol = u.symbol
+                UNION
+                SELECT
+                    u.symbol,
+                    0 as realized_pnl,
+                    u.unrealized_pnl,
+                    u.unrealized_pnl as total_pnl,
+                    0 as trade_count,
+                    0 as win_rate,
+                    0 as avg_pnl
+                FROM unrealized u
+                LEFT JOIN realized r ON u.symbol = r.symbol
+                WHERE r.symbol IS NULL
+            )
+            SELECT * FROM combined
+            WHERE trade_count >= ?
+            ORDER BY total_pnl DESC
+            """
+
+            async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
     # Execution Quality
 
     async def record_execution_quality(
