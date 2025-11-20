@@ -208,19 +208,15 @@ class TokenTracker:
     async def end_session(self):
         """End the current tracking session."""
         if self.session_id:
-            # Capture final partial interval if any usage recorded
-            if self.current_interval['requests'] > 0:
+            # Display interval summary if any intervals were recorded
+            if self.completed_intervals or self.current_interval.get('requests', 0) > 0:
+                from src.agent.tracking.interval_display import display_interval_summary
                 elapsed = time.time() - self.interval_start_time if self.interval_start_time else 0
-                interval_data = {
-                    'interval_number': self.interval_number,
-                    'duration_seconds': elapsed,
-                    'tokens_input': self.current_interval['tokens_input'],
-                    'tokens_output': self.current_interval['tokens_output'],
-                    'tokens_total': self.current_interval['tokens_input'] + self.current_interval['tokens_output'],
-                    'cost': self.current_interval['cost'],
-                    'requests': self.current_interval['requests']
-                }
-                self.completed_intervals.append(interval_data)
+                display_interval_summary(
+                    intervals=self.completed_intervals,
+                    current_interval=self.current_interval if self.current_interval.get('requests', 0) > 0 else None,
+                    current_duration=elapsed
+                )
 
             await self.db.end_session(self.session_id)
             self.is_active = False
