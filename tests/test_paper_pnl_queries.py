@@ -154,3 +154,68 @@ async def test_get_symbol_pnl_summary_empty_portfolio(tmp_path):
     results = await db.get_symbol_pnl_summary(portfolio_id)
 
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_get_symbol_pnl_summary_with_date_range(tmp_path):
+    """Test P&L summary with date range filtering."""
+    import aiosqlite
+
+    db_path = tmp_path / "test.db"
+    await init_paper_trading_db(db_path)
+
+    db = PaperTradingDatabase(db_path)
+    portfolio_id = await db.create_portfolio(name="test", starting_capital=10000.0)
+
+    # Add old trade (outside range)
+    old_date = datetime.now() - timedelta(days=30)
+    # Manually insert with specific date
+    async with aiosqlite.connect(db_path) as conn:
+        await conn.execute(
+            """INSERT INTO paper_trades
+            (portfolio_id, symbol, trade_type, price, quantity, execution_mode,
+             slippage_pct, actual_fill_price, realized_pnl, executed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (portfolio_id, "OLD/USDT", "CLOSE", 100.0, 1.0, "realistic",
+             0.1, 100.1, 50.0, old_date.isoformat())
+        )
+        await conn.commit()
+
+    # Add recent trade (inside range)
+    recent_date = datetime.now() - timedelta(days=3)
+    async with aiosqlite.connect(db_path) as conn:
+        await conn.execute(
+            """INSERT INTO paper_trades
+            (portfolio_id, symbol, trade_type, price, quantity, execution_mode,
+             slippage_pct, actual_fill_price, realized_pnl, executed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (portfolio_id, "NEW/USDT", "CLOSE", 200.0, 1.0, "realistic",
+             0.1, 200.2, 100.0, recent_date.isoformat())
+        )
+        await conn.commit()
+
+    # Query with date range (last 7 days)
+    start_date = datetime.now() - timedelta(days=7)
+    results = await db.get_symbol_pnl_summary(
+        portfolio_id=portfolio_id,
+        start_date=start_date
+    )
+
+    # Should only include NEW/USDT (not OLD/USDT)
+    assert len(results) == 1
+    assert results[0]['symbol'] == 'NEW/USDT'
+    assert results[0]['realized_pnl'] == 100.0
+
+    # Query with both start and end date
+    start_date = datetime.now() - timedelta(days=35)
+    end_date = datetime.now() - timedelta(days=20)
+    results = await db.get_symbol_pnl_summary(
+        portfolio_id=portfolio_id,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    # Should only include OLD/USDT (NEW/USDT is too recent)
+    assert len(results) == 1
+    assert results[0]['symbol'] == 'OLD/USDT'
+    assert results[0]['realized_pnl'] == 50.0
