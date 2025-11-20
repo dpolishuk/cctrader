@@ -53,6 +53,7 @@ class Config:
     MAX_TURNS: int = int(os.getenv("MAX_TURNS", "20"))
     MAX_BUDGET_USD: float = float(os.getenv("MAX_BUDGET_USD", "1.0"))
     ANALYSIS_INTERVAL: int = int(os.getenv("ANALYSIS_INTERVAL", "300"))
+    CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "glm-4.5")
 
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")

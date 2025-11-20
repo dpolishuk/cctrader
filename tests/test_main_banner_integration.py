@@ -8,6 +8,7 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from click.testing import CliRunner
 
 from src.agent.main import cli
+from src.agent.config import config
 
 
 @pytest.fixture
@@ -54,7 +55,7 @@ class TestBannerIntegration:
         assert mock_banner.called, "Banner should be displayed"
         call_args = mock_banner.call_args
         assert call_args[1]['operation_type'] == 'analysis'
-        assert call_args[1]['model'] == 'claude-sonnet-4-5'
+        assert call_args[1]['model'] == config.CLAUDE_MODEL
         assert call_args[1]['session_manager'] is not None
 
     @patch('src.agent.main.TradingAgent')
@@ -77,7 +78,7 @@ class TestBannerIntegration:
         assert mock_banner.called, "Banner should be displayed"
         call_args = mock_banner.call_args
         assert call_args[1]['operation_type'] == 'monitor'
-        assert call_args[1]['model'] == 'claude-sonnet-4-5'
+        assert call_args[1]['model'] == config.CLAUDE_MODEL
 
     @patch('src.agent.main.TradingAgent')
     @patch('src.agent.cli_banner.show_session_banner')
@@ -98,7 +99,7 @@ class TestBannerIntegration:
         assert mock_banner.called, "Banner should be displayed"
         call_args = mock_banner.call_args
         assert call_args[1]['operation_type'] == 'paper_trading'
-        assert call_args[1]['model'] == 'claude-sonnet-4-5'
+        assert call_args[1]['model'] == config.CLAUDE_MODEL
 
     @patch('src.agent.cli_banner.show_session_banner')
     def test_scan_movers_command_shows_banner(self, mock_banner, cli_runner, temp_db):
@@ -135,7 +136,7 @@ class TestBannerIntegration:
         assert mock_banner.called, "Banner should be displayed"
         call_args = mock_banner.call_args
         assert call_args[1]['operation_type'] == 'scanner'
-        assert call_args[1]['model'] == 'claude-sonnet-4-5'
+        assert call_args[1]['model'] == config.CLAUDE_MODEL
 
     def test_banner_timing_in_analyze(self, cli_runner, temp_db):
         """Test that banner appears after DB init but before agent init."""
