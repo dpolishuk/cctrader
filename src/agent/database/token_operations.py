@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 class TokenDatabase:
@@ -189,3 +189,118 @@ class TokenDatabase:
                 WHERE session_id = ?
             """, (datetime.now().isoformat(), session_id))
             await db.commit()
+
+    async def get_recent_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get recent token tracking sessions.
+
+        Args:
+            limit: Maximum number of sessions to return
+
+        Returns:
+            List of session data dicts
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                """
+                SELECT
+                    session_id,
+                    start_time,
+                    end_time,
+                    operation_mode,
+                    total_requests,
+                    total_tokens_input,
+                    total_tokens_output,
+                    total_cost_usd
+                FROM token_sessions
+                WHERE end_time IS NOT NULL
+                ORDER BY start_time DESC
+                LIMIT ?
+                """,
+                (limit,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+                sessions = []
+                for row in rows:
+                    # Calculate duration
+                    start = datetime.fromisoformat(row[1])
+                    end = datetime.fromisoformat(row[2]) if row[2] else datetime.now()
+                    duration = (end - start).total_seconds()
+
+                    sessions.append({
+                        'session_id': row[0],
+                        'start_time': row[1],
+                        'end_time': row[2],
+                        'operation_mode': row[3],
+                        'duration_seconds': duration,
+                        'total_requests': row[4],
+                        'total_tokens_input': row[5],
+                        'total_tokens_output': row[6],
+                        'total_tokens': row[5] + row[6],
+                        'total_cost_usd': row[7]
+                    })
+
+                return sessions
+
+    async def get_session_intervals(self, session_id: str, interval_minutes: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get token usage broken down by intervals for a session.
+
+        Args:
+            session_id: Session ID to query
+            interval_minutes: Interval duration in minutes
+
+        Returns:
+            List of interval data dicts
+        """
+        interval_seconds = interval_minutes * 60
+
+        async with aiosqlite.connect(self.db_path) as db:
+            # Get session start time
+            async with db.execute(
+                "SELECT start_time FROM token_sessions WHERE session_id = ?",
+                (session_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if not row:
+                    return []
+                start_time = row[0]
+
+            # Query intervals
+            async with db.execute(
+                """
+                SELECT
+                    CAST((strftime('%s', timestamp) - strftime('%s', ?)) / ? AS INTEGER) as interval_num,
+                    SUM(tokens_input) as tokens_input,
+                    SUM(tokens_output) as tokens_output,
+                    SUM(cost_usd) as cost,
+                    COUNT(*) as requests,
+                    MIN(timestamp) as interval_start,
+                    MAX(timestamp) as interval_end
+                FROM token_usage
+                WHERE session_id = ?
+                GROUP BY interval_num
+                ORDER BY interval_num
+                """,
+                (start_time, interval_seconds, session_id)
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+                intervals = []
+                for row in rows:
+                    interval_start = datetime.fromisoformat(row[5])
+                    interval_end = datetime.fromisoformat(row[6])
+                    duration = (interval_end - interval_start).total_seconds()
+
+                    intervals.append({
+                        'interval_number': row[0] + 1,  # 1-indexed
+                        'duration_seconds': duration,
+                        'tokens_input': row[1],
+                        'tokens_output': row[2],
+                        'tokens_total': row[1] + row[2],
+                        'cost': row[3],
+                        'requests': row[4]
+                    })
+
+                return intervals

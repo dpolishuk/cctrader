@@ -131,3 +131,44 @@ async def test_end_session(token_db):
     session = await token_db.get_session(session_id)
     assert session['is_active'] == 0
     assert session['end_time'] is not None
+
+
+@pytest.mark.asyncio
+async def test_get_recent_sessions(token_db):
+    """Test retrieving recent sessions."""
+    # Create sessions
+    session1 = await token_db.create_session("test1")
+    await token_db.end_session(session1)
+
+    session2 = await token_db.create_session("test2")
+    await token_db.end_session(session2)
+
+    # Get recent sessions
+    sessions = await token_db.get_recent_sessions(limit=10)
+
+    assert len(sessions) == 2
+    assert sessions[0]['session_id'] == session2  # Most recent first
+    assert sessions[1]['session_id'] == session1
+
+
+@pytest.mark.asyncio
+async def test_get_session_intervals(token_db):
+    """Test retrieving session intervals."""
+    session_id = await token_db.create_session("test")
+
+    # Record usage at different times
+    await token_db.record_token_usage(
+        session_id=session_id,
+        operation_type="test",
+        model="claude-3-5-sonnet",
+        tokens_input=100,
+        tokens_output=50,
+        cost_usd=0.01
+    )
+
+    # Get intervals
+    intervals = await token_db.get_session_intervals(session_id, interval_minutes=5)
+
+    assert len(intervals) >= 1
+    assert intervals[0]['tokens_input'] == 100
+    assert intervals[0]['tokens_output'] == 50

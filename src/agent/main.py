@@ -652,5 +652,60 @@ def sessions(clear_sessions, clear_type):
     asyncio.run(run())
 
 
+@cli.command()
+@click.option('--session-id', default=None, help='Session ID to show intervals for')
+@click.option('--limit', default=10, help='Number of recent sessions to show')
+def token_intervals(session_id, limit):
+    """Show token usage intervals for sessions."""
+    async def run():
+        db_path = Path(os.getenv("DB_PATH", "./trading_data.db"))
+
+        from src.agent.database.token_operations import TokenDatabase
+        from src.agent.tracking.interval_display import display_interval_summary
+        from src.agent.config import config
+
+        db = TokenDatabase(db_path)
+
+        if session_id:
+            # Show specific session intervals
+            intervals = await db.get_session_intervals(session_id, config.TOKEN_INTERVAL_MINUTES)
+
+            if not intervals:
+                console.print(f"[yellow]Session {session_id} not found or has no data[/yellow]")
+                return
+
+            display_interval_summary(intervals)
+        else:
+            # List recent sessions
+            sessions = await db.get_recent_sessions(limit)
+
+            if not sessions:
+                console.print("[yellow]No completed sessions found[/yellow]")
+                return
+
+            table = Table(title="Recent Token Tracking Sessions", show_header=True)
+            table.add_column("Session ID", style="cyan")
+            table.add_column("Started", style="blue")
+            table.add_column("Duration", style="green")
+            table.add_column("Tokens", justify="right", style="green")
+            table.add_column("Cost", justify="right", style="yellow")
+
+            for session in sessions:
+                duration_str = f"{int(session['duration_seconds'] // 60)}:{int(session['duration_seconds'] % 60):02d}"
+                table.add_row(
+                    session['session_id'][:12] + "...",
+                    session['start_time'][:19],
+                    duration_str,
+                    f"{session['total_tokens']:,}",
+                    f"${session['total_cost_usd']:.4f}"
+                )
+
+            console.print("\n")
+            console.print(table)
+            console.print("\n[dim]Use --session-id to see 5-minute interval breakdown[/dim]\n")
+
+    asyncio.run(run())
+
+
 if __name__ == '__main__':
     cli()
