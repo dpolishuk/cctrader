@@ -34,6 +34,7 @@ sqlite3.register_converter("DATETIME", _convert_datetime)
 class Config:
     # API Keys
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_API_URL: str = os.getenv("ANTHROPIC_API_URL", "https://api.anthropic.com")
     BYBIT_API_KEY: str = os.getenv("BYBIT_API_KEY", "")
     BYBIT_API_SECRET: str = os.getenv("BYBIT_API_SECRET", "")
 
