@@ -26,6 +26,22 @@ def cli():
 def monitor(symbol, interval):
     """Start continuous market monitoring."""
     async def run():
+        from src.agent.session_manager import SessionManager
+        from src.agent.cli_banner import show_session_banner
+        from src.agent.config import config
+
+        # Initialize session manager
+        db_path = Path(config.DB_PATH)
+        session_manager = SessionManager(db_path)
+        await session_manager.init_db()
+
+        # Display session banner
+        await show_session_banner(
+            operation_type="monitor",
+            model="claude-sonnet-4-5",
+            session_manager=session_manager
+        )
+
         agent = TradingAgent(symbol=symbol)
         await agent.initialize()
         try:
@@ -45,6 +61,22 @@ def monitor(symbol, interval):
 def analyze(symbol, show_tokens, query):
     """Run a single market analysis."""
     async def run():
+        from src.agent.session_manager import SessionManager
+        from src.agent.cli_banner import show_session_banner
+        from src.agent.config import config
+
+        # Initialize session manager
+        db_path = Path(config.DB_PATH)
+        session_manager = SessionManager(db_path)
+        await session_manager.init_db()
+
+        # Display session banner
+        await show_session_banner(
+            operation_type="analysis",
+            model="claude-sonnet-4-5",
+            session_manager=session_manager
+        )
+
         agent = TradingAgent(symbol=symbol)
         await agent.initialize()
         try:
@@ -197,6 +229,22 @@ def paper_status(name):
 def paper_monitor(symbol, portfolio, interval):
     """Start continuous monitoring in paper trading mode."""
     async def run():
+        from src.agent.session_manager import SessionManager
+        from src.agent.cli_banner import show_session_banner
+        from src.agent.config import config
+
+        # Initialize session manager
+        db_path = Path(config.DB_PATH)
+        session_manager = SessionManager(db_path)
+        await session_manager.init_db()
+
+        # Display session banner
+        await show_session_banner(
+            operation_type="paper_trading",
+            model="claude-sonnet-4-5",
+            session_manager=session_manager
+        )
+
         agent = TradingAgent(
             symbol=symbol,
             paper_trading=True,
@@ -421,6 +469,14 @@ Speed target: Complete analysis in under 30 seconds.""",
         from src.agent.session_manager import SessionManager
         session_manager = SessionManager(db_path)
         await session_manager.init_db()
+
+        # Display session banner
+        from src.agent.cli_banner import show_session_banner
+        await show_session_banner(
+            operation_type="scanner",
+            model="claude-sonnet-4-5",
+            session_manager=session_manager
+        )
 
         # Initialize token tracking if enabled
         token_tracker = None
