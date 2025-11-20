@@ -96,7 +96,9 @@ async def test_interval_tracking_initialization(tracker):
     assert hasattr(tracker, 'current_interval')
     assert hasattr(tracker, 'completed_intervals')
 
-    assert tracker.interval_number == 0
+    # After session start, interval should be initialized
+    assert tracker.interval_number == 1
+    assert tracker.interval_start_time is not None
     assert tracker.current_interval == {
         'tokens_input': 0,
         'tokens_output': 0,
@@ -104,3 +106,39 @@ async def test_interval_tracking_initialization(tracker):
         'requests': 0
     }
     assert tracker.completed_intervals == []
+
+
+@pytest.mark.asyncio
+async def test_interval_initialization_on_start_session(tmp_path):
+    """Test interval tracking initializes when session starts."""
+    db_path = tmp_path / "test.db"
+
+    # Initialize database schema
+    import aiosqlite
+    async with aiosqlite.connect(db_path) as db:
+        await create_token_tracking_tables(db)
+        await db.commit()
+
+    tracker = TokenTracker(db_path=db_path, operation_mode="test")
+
+    # Before session start
+    assert tracker.interval_start_time is None
+    assert tracker.interval_number == 0
+
+    # Start session
+    await tracker.start_session()
+
+    # After session start
+    assert tracker.interval_start_time is not None
+    assert isinstance(tracker.interval_start_time, float)
+    assert tracker.interval_start_time > 0
+    assert tracker.interval_number == 1
+    assert tracker.current_interval == {
+        'tokens_input': 0,
+        'tokens_output': 0,
+        'cost': 0.0,
+        'requests': 0
+    }
+
+    # Clean up
+    await tracker.end_session()

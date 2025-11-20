@@ -56,6 +56,18 @@ class TokenTracker:
         """
         self.session_id = await self.db.create_session(self.operation_mode)
         self.is_active = True
+
+        # Initialize interval tracking
+        self.interval_start_time = time.time()
+        self.interval_number = 1
+        self.current_interval = {
+            'tokens_input': 0,
+            'tokens_output': 0,
+            'cost': 0.0,
+            'requests': 0
+        }
+        self.completed_intervals = []
+
         return self.session_id
 
     async def record_usage(
