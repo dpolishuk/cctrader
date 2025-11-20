@@ -8,7 +8,7 @@ async def test_validate_all_checks_pass():
     """Test validation when all risk checks pass."""
     mock_portfolio = AsyncMock()
     mock_portfolio.count_open_positions = AsyncMock(return_value=2)
-    mock_portfolio.calculate_total_exposure_pct = AsyncMock(return_value=10.0)
+    mock_portfolio.calculate_exposure_pct = AsyncMock(return_value=10.0)
     mock_portfolio.calculate_daily_pnl_pct = AsyncMock(return_value=-2.0)
     mock_portfolio.calculate_weekly_pnl_pct = AsyncMock(return_value=3.0)
     mock_portfolio.get_open_positions = AsyncMock(return_value=[])
@@ -63,7 +63,7 @@ async def test_reject_exposure_limit():
     """Test rejection when exposure limit exceeded."""
     mock_portfolio = AsyncMock()
     mock_portfolio.count_open_positions = AsyncMock(return_value=2)
-    mock_portfolio.calculate_total_exposure_pct = AsyncMock(return_value=20.0)
+    mock_portfolio.calculate_exposure_pct = AsyncMock(return_value=20.0)
     mock_portfolio.total_value = 10000
 
     config = RiskConfig()
@@ -84,7 +84,7 @@ async def test_reject_daily_loss_limit():
     """Test rejection when daily loss limit hit."""
     mock_portfolio = AsyncMock()
     mock_portfolio.count_open_positions = AsyncMock(return_value=2)
-    mock_portfolio.calculate_total_exposure_pct = AsyncMock(return_value=10.0)
+    mock_portfolio.calculate_exposure_pct = AsyncMock(return_value=10.0)
     mock_portfolio.calculate_daily_pnl_pct = AsyncMock(return_value=-8.5)
 
     config = RiskConfig()
@@ -102,7 +102,7 @@ async def test_reject_correlation_limit():
     """Test rejection when too many correlated positions."""
     mock_portfolio = AsyncMock()
     mock_portfolio.count_open_positions = AsyncMock(return_value=2)
-    mock_portfolio.calculate_total_exposure_pct = AsyncMock(return_value=10.0)
+    mock_portfolio.calculate_exposure_pct = AsyncMock(return_value=10.0)
     mock_portfolio.calculate_daily_pnl_pct = AsyncMock(return_value=-2.0)
     mock_portfolio.calculate_weekly_pnl_pct = AsyncMock(return_value=1.0)
 

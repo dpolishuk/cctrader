@@ -46,7 +46,7 @@ class RiskValidator:
             }
 
         # Check 3: Exposure limit
-        current_exposure = await self.portfolio.calculate_total_exposure_pct()
+        current_exposure = await self.portfolio.calculate_exposure_pct()
         position_size_pct = signal.get('position_size_pct', 0)
         position_size_usd = signal.get('position_size_usd', 0)
 
