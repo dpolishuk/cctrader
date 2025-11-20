@@ -37,7 +37,7 @@ def monitor(symbol, interval):
 
         # Display session banner
         await show_session_banner(
-            operation_type="monitor",
+            operation_type=SessionManager.MONITOR,
             model="claude-sonnet-4-5",
             session_manager=session_manager
         )
@@ -72,7 +72,7 @@ def analyze(symbol, show_tokens, query):
 
         # Display session banner
         await show_session_banner(
-            operation_type="analysis",
+            operation_type=SessionManager.ANALYSIS,
             model="claude-sonnet-4-5",
             session_manager=session_manager
         )
@@ -240,7 +240,7 @@ def paper_monitor(symbol, portfolio, interval):
 
         # Display session banner
         await show_session_banner(
-            operation_type="paper_trading",
+            operation_type=SessionManager.PAPER_TRADING,
             model="claude-sonnet-4-5",
             session_manager=session_manager
         )
@@ -473,7 +473,7 @@ Speed target: Complete analysis in under 30 seconds.""",
         # Display session banner
         from src.agent.cli_banner import show_session_banner
         await show_session_banner(
-            operation_type="scanner",
+            operation_type=SessionManager.SCANNER,
             model="claude-sonnet-4-5",
             session_manager=session_manager
         )
