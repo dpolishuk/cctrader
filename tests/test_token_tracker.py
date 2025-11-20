@@ -86,3 +86,21 @@ async def test_get_rate_limit_status(tracker):
     assert 'hourly' in status
     assert 'daily' in status
     assert status['hourly']['request_count'] == 5
+
+
+@pytest.mark.asyncio
+async def test_interval_tracking_initialization(tracker):
+    """Test that interval tracking state initializes correctly."""
+    assert hasattr(tracker, 'interval_start_time')
+    assert hasattr(tracker, 'interval_number')
+    assert hasattr(tracker, 'current_interval')
+    assert hasattr(tracker, 'completed_intervals')
+
+    assert tracker.interval_number == 0
+    assert tracker.current_interval == {
+        'tokens_input': 0,
+        'tokens_output': 0,
+        'cost': 0.0,
+        'requests': 0
+    }
+    assert tracker.completed_intervals == []

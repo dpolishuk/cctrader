@@ -1,7 +1,7 @@
 """Core token tracker for Claude Agent SDK."""
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from src.agent.tracking.pricing import TokenPricingCalculator
 from src.agent.database.token_operations import TokenDatabase
@@ -34,6 +34,18 @@ class TokenTracker:
 
         self.session_id: Optional[str] = None
         self.is_active = False
+
+        # Interval tracking state
+        self.interval_start_time: Optional[float] = None
+        self.interval_number: int = 0
+        self.current_interval: Dict[str, Any] = {
+            'tokens_input': 0,
+            'tokens_output': 0,
+            'cost': 0.0,
+            'requests': 0
+        }
+        self.completed_intervals: List[Dict[str, Any]] = []
+        self.INTERVAL_DURATION = config.TOKEN_INTERVAL_MINUTES * 60  # Convert to seconds
 
     async def start_session(self) -> str:
         """
