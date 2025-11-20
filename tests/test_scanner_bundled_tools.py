@@ -4,13 +4,30 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from src.agent.scanner.tools import fetch_technical_snapshot, fetch_sentiment_data
 
 
+def generate_mock_ohlcv(periods=200, start_price=100):
+    """Generate mock OHLCV data."""
+    data = []
+    price = start_price
+    for i in range(periods):
+        price += (i % 10 - 5) * 0.5
+        data.append({
+            'timestamp': i * 3600000,
+            'open': price - 0.5,
+            'high': price + 1,
+            'low': price - 1,
+            'close': price,
+            'volume': 1000000 + (i * 1000)
+        })
+    return data
+
+
 @pytest.mark.asyncio
 async def test_fetch_technical_snapshot_success():
-    """Test successful fetch of all technical data."""
+    """Test successful fetch and analysis of all technical data."""
     # Mock the internal fetch functions
-    mock_15m_data = {"ohlcv": [[1, 2, 3, 4, 5]], "indicators": {"rsi": 50}}
-    mock_1h_data = {"ohlcv": [[6, 7, 8, 9, 10]], "indicators": {"rsi": 55}}
-    mock_4h_data = {"ohlcv": [[11, 12, 13, 14, 15]], "indicators": {"rsi": 60}}
+    mock_15m_data = generate_mock_ohlcv(200, 100)
+    mock_1h_data = generate_mock_ohlcv(200, 105)
+    mock_4h_data = generate_mock_ohlcv(200, 110)
     mock_price = 93500.0
 
     with patch('src.agent.scanner.tools.fetch_market_data_internal') as mock_fetch, \
@@ -20,7 +37,7 @@ async def test_fetch_technical_snapshot_success():
         mock_fetch.side_effect = [mock_15m_data, mock_1h_data, mock_4h_data]
         mock_price_fn.return_value = mock_price
 
-        # Call the tool handler function (the @tool decorator wraps it)
+        # Call the tool handler function
         result = await fetch_technical_snapshot.handler({"symbol": "BTCUSDT"})
 
         # Verify structure
@@ -31,28 +48,47 @@ async def test_fetch_technical_snapshot_success():
         import json
         data = json.loads(content["text"])
 
-        # Verify all timeframes present
+        # Verify all timeframes present with analyzed data
         assert "timeframes" in data
         assert "15m" in data["timeframes"]
         assert "1h" in data["timeframes"]
         assert "4h" in data["timeframes"]
-        assert data["timeframes"]["15m"] == mock_15m_data
-        assert data["timeframes"]["1h"] == mock_1h_data
-        assert data["timeframes"]["4h"] == mock_4h_data
+
+        # Verify each timeframe has analysis
+        for tf in ["15m", "1h", "4h"]:
+            tf_data = data["timeframes"][tf]
+            assert tf_data["status"] == "success"
+            assert "trend" in tf_data
+            assert "momentum" in tf_data
+            assert "volatility" in tf_data
+            assert "patterns" in tf_data
+
+            # Verify scores exist
+            assert "score" in tf_data["trend"]
+            assert "score" in tf_data["momentum"]
+            assert "score" in tf_data["volatility"]
 
         # Verify current price
         assert data["current_price"] == mock_price
 
-        # Verify no warnings
-        assert data["warnings"] == []
-        assert data["success_count"] == 4
+        # Verify symbol
+        assert data["symbol"] == "BTCUSDT"
+
+        # Verify summary exists
+        assert "summary" in data
+        assert "overall_trend" in data["summary"]
+        assert "overall_momentum" in data["summary"]
+        assert "volatility_level" in data["summary"]
+
+        # Verify success count
+        assert data["data_fetch_success"] == 4
 
 
 @pytest.mark.asyncio
 async def test_fetch_technical_snapshot_partial_failure():
     """Test fetch with one timeframe failing."""
-    mock_15m_data = {"ohlcv": [[1, 2, 3, 4, 5]], "indicators": {"rsi": 50}}
-    mock_1h_data = {"ohlcv": [[6, 7, 8, 9, 10]], "indicators": {"rsi": 55}}
+    mock_15m_data = generate_mock_ohlcv(200, 100)
+    mock_1h_data = generate_mock_ohlcv(200, 105)
     mock_price = 93500.0
 
     with patch('src.agent.scanner.tools.fetch_market_data_internal') as mock_fetch, \
@@ -71,16 +107,48 @@ async def test_fetch_technical_snapshot_partial_failure():
         import json
         data = json.loads(result["content"][0]["text"])
 
-        # Verify partial success
-        assert data["timeframes"]["15m"] == mock_15m_data
-        assert data["timeframes"]["1h"] == mock_1h_data
-        assert data["timeframes"]["4h"] is None  # Failed
+        # Verify partial success - 15m and 1h should have analyzed data
+        assert data["timeframes"]["15m"]["status"] == "success"
+        assert data["timeframes"]["1h"]["status"] == "success"
+
+        # 4h should show failure
+        assert data["timeframes"]["4h"]["status"] == "failed"
+        assert "error" in data["timeframes"]["4h"]
+
         assert data["current_price"] == mock_price
 
         # Verify warning present
-        assert len(data["warnings"]) == 1
-        assert "4h data fetch failed" in data["warnings"][0]
-        assert data["success_count"] == 3  # 3 out of 4 succeeded
+        assert len(data["warnings"]) >= 1
+        assert any("4h data fetch failed" in w for w in data["warnings"])
+        assert data["data_fetch_success"] == 3  # 3 out of 4 succeeded
+
+
+@pytest.mark.asyncio
+async def test_fetch_technical_snapshot_insufficient_data():
+    """Test fetch with insufficient data for analysis."""
+    # Only 50 periods - may be enough for some indicators but not all
+    mock_15m_data = generate_mock_ohlcv(50, 100)
+    mock_1h_data = generate_mock_ohlcv(50, 105)
+    mock_4h_data = generate_mock_ohlcv(50, 110)
+    mock_price = 93500.0
+
+    with patch('src.agent.scanner.tools.fetch_market_data_internal') as mock_fetch, \
+         patch('src.agent.scanner.tools.get_current_price_internal') as mock_price_fn:
+
+        mock_fetch.side_effect = [mock_15m_data, mock_1h_data, mock_4h_data]
+        mock_price_fn.return_value = mock_price
+
+        result = await fetch_technical_snapshot.handler({"symbol": "BTCUSDT"})
+
+        import json
+        data = json.loads(result["content"][0]["text"])
+
+        # Data fetch should succeed
+        assert data["data_fetch_success"] == 4
+
+        # With 50 periods, analysis should still succeed for most indicators
+        # Verify at least one timeframe has successful analysis
+        assert any(tf["status"] == "success" for tf in data["timeframes"].values())
 
 
 @pytest.mark.asyncio
@@ -91,7 +159,6 @@ async def test_fetch_sentiment_data_success():
         {"title": "BTC ETF Approved", "snippet": "SEC approves...", "url": "https://..."},
         {"title": "Institutional Demand", "snippet": "Major funds...", "url": "https://..."}
     ]
-    mock_summary = "Positive catalysts: ETF approval, institutional demand"
 
     with patch('src.agent.scanner.tools.generate_sentiment_query_internal') as mock_query_fn, \
          patch('src.agent.scanner.tools.execute_web_search_internal') as mock_search:

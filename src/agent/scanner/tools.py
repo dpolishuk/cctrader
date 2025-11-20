@@ -203,10 +203,11 @@ async def get_current_price_internal(symbol: str) -> float:
 @tool(
     name="fetch_technical_snapshot",
     description="""
-    Fetch complete technical analysis data in one call.
+    Fetch complete technical analysis snapshot in one call.
 
-    Returns ALL timeframe data (15m, 1h, 4h) plus current price.
-    This is the PRIMARY tool for gathering technical data - more efficient than individual fetches.
+    Returns ANALYZED technical data for multiple timeframes (15m, 1h, 4h).
+    Includes trend, momentum, volatility, and pattern analysis for each timeframe.
+    This is the PRIMARY tool for gathering technical data - fully analyzed and ready to use.
 
     Returns data even if some timeframes fail (graceful degradation).
 
@@ -214,53 +215,59 @@ async def get_current_price_internal(symbol: str) -> float:
         symbol: Trading pair (e.g., "BTCUSDT")
 
     Returns:
-        JSON with timeframes dict, current_price, warnings array, success_count
+        JSON with analyzed data per timeframe, current price, warnings, and summary.
+        Each timeframe includes: trend_score, momentum_score, volatility_score, key signals.
     """,
     input_schema={
         "symbol": str
     }
 )
 async def fetch_technical_snapshot(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Fetch all technical data in one bundled call."""
+    """Fetch and analyze all technical data in one bundled call."""
+    from src.agent.tools.technical_analysis import (
+        analyze_trend, analyze_momentum, analyze_volatility, analyze_patterns
+    )
+
     symbol = args.get("symbol", "")
     warnings: List[str] = []
     success_count = 0
 
     # Fetch all data in parallel using asyncio.gather
+    # Fetch 200+ periods for 1h to support all indicators (EMA 200 needs 200 periods)
     results = await asyncio.gather(
-        fetch_market_data_internal(symbol, "15m", limit=50),
-        fetch_market_data_internal(symbol, "1h", limit=50),
-        fetch_market_data_internal(symbol, "4h", limit=50),
+        fetch_market_data_internal(symbol, "15m", limit=200),
+        fetch_market_data_internal(symbol, "1h", limit=200),
+        fetch_market_data_internal(symbol, "4h", limit=200),
         get_current_price_internal(symbol),
         return_exceptions=True
     )
 
     # Process results with error handling
-    timeframes = {}
+    ohlcv_data = {}
     current_price = 0.0
 
     # 15m data
     if isinstance(results[0], Exception):
         warnings.append(f"15m data fetch failed: {results[0]}")
-        timeframes["15m"] = None
+        ohlcv_data["15m"] = None
     else:
-        timeframes["15m"] = results[0]
+        ohlcv_data["15m"] = results[0]
         success_count += 1
 
     # 1h data
     if isinstance(results[1], Exception):
         warnings.append(f"1h data fetch failed: {results[1]}")
-        timeframes["1h"] = None
+        ohlcv_data["1h"] = None
     else:
-        timeframes["1h"] = results[1]
+        ohlcv_data["1h"] = results[1]
         success_count += 1
 
     # 4h data
     if isinstance(results[2], Exception):
         warnings.append(f"4h data fetch failed: {results[2]}")
-        timeframes["4h"] = None
+        ohlcv_data["4h"] = None
     else:
-        timeframes["4h"] = results[2]
+        ohlcv_data["4h"] = results[2]
         success_count += 1
 
     # Current price
@@ -271,20 +278,155 @@ async def fetch_technical_snapshot(args: Dict[str, Any]) -> Dict[str, Any]:
         current_price = results[3]
         success_count += 1
 
-    # Build response
+    # Now analyze each timeframe that has data
+    analyzed_timeframes = {}
+
+    for timeframe, ohlcv in ohlcv_data.items():
+        if ohlcv is None or not ohlcv:
+            analyzed_timeframes[timeframe] = {
+                "status": "failed",
+                "error": "No OHLCV data available"
+            }
+            continue
+
+        # Run all analyses in parallel for this timeframe
+        analyses = await asyncio.gather(
+            analyze_trend.handler({"ohlcv_data": ohlcv, "symbol": symbol, "timeframe": timeframe}),
+            analyze_momentum.handler({"ohlcv_data": ohlcv, "symbol": symbol, "timeframe": timeframe}),
+            analyze_volatility.handler({"ohlcv_data": ohlcv, "symbol": symbol, "timeframe": timeframe}),
+            analyze_patterns.handler({"ohlcv_data": ohlcv, "symbol": symbol, "timeframe": timeframe}),
+            return_exceptions=True
+        )
+
+        # Extract results
+        trend_result = analyses[0] if not isinstance(analyses[0], Exception) else None
+        momentum_result = analyses[1] if not isinstance(analyses[1], Exception) else None
+        volatility_result = analyses[2] if not isinstance(analyses[2], Exception) else None
+        pattern_result = analyses[3] if not isinstance(analyses[3], Exception) else None
+
+        # Build analyzed data for this timeframe
+        timeframe_analysis = {
+            "status": "success",
+            "trend": {
+                "score": trend_result.get("trend_score", 0.5) if trend_result else None,
+                "signals": trend_result.get("signals", []) if trend_result else [],
+                "interpretation": trend_result.get("interpretation", "N/A") if trend_result else "Analysis failed"
+            },
+            "momentum": {
+                "score": momentum_result.get("momentum_score", 0.0) if momentum_result else None,
+                "signals": momentum_result.get("signals", []) if momentum_result else [],
+                "interpretation": momentum_result.get("interpretation", "N/A") if momentum_result else "Analysis failed"
+            },
+            "volatility": {
+                "score": volatility_result.get("volatility_score", 0.5) if volatility_result else None,
+                "atr_percent": volatility_result.get("indicators", {}).get("atr_percent", 0.0) if volatility_result else None,
+                "signals": volatility_result.get("signals", []) if volatility_result else []
+            },
+            "patterns": {
+                "current_level": pattern_result.get("current_level", "50.0") if pattern_result else None,
+                "support_levels": pattern_result.get("support_levels", []) if pattern_result else [],
+                "resistance_levels": pattern_result.get("resistance_levels", []) if pattern_result else [],
+                "signals": pattern_result.get("signals", []) if pattern_result else []
+            }
+        }
+
+        # Track any analysis failures
+        if isinstance(analyses[0], Exception):
+            warnings.append(f"{timeframe} trend analysis failed: {analyses[0]}")
+        if isinstance(analyses[1], Exception):
+            warnings.append(f"{timeframe} momentum analysis failed: {analyses[1]}")
+        if isinstance(analyses[2], Exception):
+            warnings.append(f"{timeframe} volatility analysis failed: {analyses[2]}")
+        if isinstance(analyses[3], Exception):
+            warnings.append(f"{timeframe} pattern analysis failed: {analyses[3]}")
+
+        analyzed_timeframes[timeframe] = timeframe_analysis
+
+    # Build comprehensive response
     response_data = {
-        "timeframes": timeframes,
+        "symbol": symbol,
         "current_price": current_price,
+        "timeframes": analyzed_timeframes,
         "warnings": warnings,
-        "success_count": success_count
+        "data_fetch_success": success_count,
+        "summary": {
+            "overall_trend": _calculate_overall_trend(analyzed_timeframes),
+            "overall_momentum": _calculate_overall_momentum(analyzed_timeframes),
+            "volatility_level": _get_volatility_level(analyzed_timeframes)
+        }
     }
 
     return {
         "content": [{
             "type": "text",
-            "text": json.dumps(response_data)
+            "text": json.dumps(response_data, indent=2)
         }]
     }
+
+
+def _calculate_overall_trend(timeframes: Dict[str, Any]) -> str:
+    """Calculate overall trend from multiple timeframes."""
+    scores = []
+    for tf_data in timeframes.values():
+        if tf_data.get("status") == "success" and tf_data.get("trend", {}).get("score") is not None:
+            scores.append(tf_data["trend"]["score"])
+
+    if not scores:
+        return "unknown"
+
+    avg_score = sum(scores) / len(scores)
+    if avg_score > 0.7:
+        return "strong_uptrend"
+    elif avg_score > 0.55:
+        return "uptrend"
+    elif avg_score >= 0.45:
+        return "neutral"
+    elif avg_score >= 0.3:
+        return "downtrend"
+    else:
+        return "strong_downtrend"
+
+
+def _calculate_overall_momentum(timeframes: Dict[str, Any]) -> str:
+    """Calculate overall momentum from multiple timeframes."""
+    scores = []
+    for tf_data in timeframes.values():
+        if tf_data.get("status") == "success" and tf_data.get("momentum", {}).get("score") is not None:
+            scores.append(tf_data["momentum"]["score"])
+
+    if not scores:
+        return "unknown"
+
+    avg_score = sum(scores) / len(scores)
+    if avg_score > 0.5:
+        return "strong_bullish"
+    elif avg_score > 0.2:
+        return "bullish"
+    elif avg_score >= -0.2:
+        return "neutral"
+    elif avg_score >= -0.5:
+        return "bearish"
+    else:
+        return "strong_bearish"
+
+
+def _get_volatility_level(timeframes: Dict[str, Any]) -> str:
+    """Get average volatility level from multiple timeframes."""
+    scores = []
+    for tf_data in timeframes.values():
+        if tf_data.get("status") == "success" and tf_data.get("volatility", {}).get("score") is not None:
+            scores.append(tf_data["volatility"]["score"])
+
+    if not scores:
+        return "unknown"
+
+    avg_score = sum(scores) / len(scores)
+    if avg_score > 0.7:
+        return "high"
+    elif avg_score > 0.4:
+        return "normal"
+    else:
+        return "low"
 
 
 async def generate_sentiment_query_internal(symbol: str, context: str = "") -> str:
