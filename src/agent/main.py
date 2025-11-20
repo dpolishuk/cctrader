@@ -290,7 +290,14 @@ def scan_movers(interval, portfolio):
         from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server
         from src.agent.scanner.agent_wrapper import AgentWrapper
         from src.agent.tools.market_data import fetch_market_data, get_current_price
-        from src.agent.tools.technical_analysis import analyze_technicals, multi_timeframe_analysis
+        from src.agent.tools.technical_analysis import (
+            analyze_technicals,
+            multi_timeframe_analysis,
+            analyze_trend,
+            analyze_momentum,
+            analyze_volatility,
+            analyze_patterns
+        )
         from src.agent.tools.sentiment import analyze_market_sentiment, detect_market_events
         from src.agent.scanner.tools import submit_trading_signal, fetch_technical_snapshot, fetch_sentiment_data
         from src.agent.tracking.token_tracker import TokenTracker
@@ -307,6 +314,11 @@ def scan_movers(interval, portfolio):
                 fetch_technical_snapshot,
                 fetch_sentiment_data,
                 submit_trading_signal,
+                # New technical analysis tools
+                analyze_trend,
+                analyze_momentum,
+                analyze_volatility,
+                analyze_patterns,
             ]
         )
 
@@ -322,6 +334,10 @@ def scan_movers(interval, portfolio):
                 "mcp__trading__fetch_technical_snapshot",
                 "mcp__trading__fetch_sentiment_data",
                 "mcp__trading__submit_trading_signal",
+                "mcp__trading__analyze_trend",
+                "mcp__trading__analyze_momentum",
+                "mcp__trading__analyze_volatility",
+                "mcp__trading__analyze_patterns",
                 "mcp__web-search__search",  # Used internally by fetch_sentiment_data
             ],
 

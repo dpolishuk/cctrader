@@ -17,7 +17,14 @@ import aiosqlite
 
 # Import all tools
 from .tools.market_data import fetch_market_data, get_current_price
-from .tools.technical_analysis import analyze_technicals, multi_timeframe_analysis
+from .tools.technical_analysis import (
+    analyze_technicals,
+    multi_timeframe_analysis,
+    analyze_trend,
+    analyze_momentum,
+    analyze_volatility,
+    analyze_patterns
+)
 from .tools.sentiment import analyze_market_sentiment, detect_market_events
 from .tools.signals import generate_trading_signal
 from .tools.portfolio import update_portfolio, calculate_pnl
@@ -88,6 +95,10 @@ class TradingAgent:
             get_current_price,
             analyze_technicals,
             multi_timeframe_analysis,
+            analyze_trend,
+            analyze_momentum,
+            analyze_volatility,
+            analyze_patterns,
             analyze_market_sentiment,
             detect_market_events,
             generate_trading_signal,
@@ -125,6 +136,10 @@ class TradingAgent:
                 "mcp__trading__get_current_price",
                 "mcp__trading__analyze_technicals",
                 "mcp__trading__multi_timeframe_analysis",
+                "mcp__trading__analyze_trend",
+                "mcp__trading__analyze_momentum",
+                "mcp__trading__analyze_volatility",
+                "mcp__trading__analyze_patterns",
                 "mcp__trading__analyze_market_sentiment",
                 "mcp__trading__detect_market_events",
                 "mcp__trading__generate_trading_signal",
