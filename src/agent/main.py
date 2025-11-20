@@ -260,6 +260,34 @@ def paper_monitor(symbol, portfolio, interval):
 
 @cli.command()
 @click.option('--portfolio', required=True, help='Portfolio name')
+@click.option('--period', default='all',
+              type=click.Choice(['daily', 'weekly', 'monthly', 'all']),
+              help='Time period for report (default: all)')
+@click.option('--min-trades', default=1, type=int,
+              help='Minimum trades per symbol (default: 1)')
+def pnl_report(portfolio, period, min_trades):
+    """Display P&L report by symbol and time period."""
+    async def run():
+        from src.agent.display.pnl_report import display_pnl_report
+        from src.agent.database.paper_operations import PaperTradingDatabase
+        from pathlib import Path
+        from src.agent.config import config
+
+        try:
+            db = PaperTradingDatabase(Path(config.DB_PATH))
+            await display_pnl_report(db, portfolio, period, min_trades)
+        except ValueError as e:
+            console.print(f"[red]Error:[/red] {str(e)}")
+            raise click.Abort()
+        except Exception as e:
+            console.print(f"[red]Error:[/red] Failed to generate P&L report: {str(e)}")
+            logger.exception("P&L report failed")
+            raise click.Abort()
+
+    asyncio.run(run())
+
+@cli.command()
+@click.option('--portfolio', required=True, help='Portfolio name')
 def reset_breaker(portfolio):
     """Reset circuit breaker for a portfolio."""
     async def run():
