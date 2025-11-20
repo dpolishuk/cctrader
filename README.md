@@ -71,6 +71,42 @@ Check current portfolio position:
 python -m src.agent.main status --symbol BTC/USDT
 ```
 
+### P&L Report
+
+Display profit and loss metrics aggregated by trading symbol:
+
+```bash
+cctrader pnl-report --portfolio <name> [--period <daily|weekly|monthly|all>] [--min-trades <N>]
+```
+
+**Options:**
+- `--portfolio`: Portfolio name (required)
+- `--period`: Time period for analysis (default: all)
+  - `daily`: Last 7 days
+  - `weekly`: Last 4 weeks
+  - `monthly`: Last 12 months
+  - `all`: All-time performance
+- `--min-trades`: Minimum trades to include symbol (default: 1)
+
+**Example Output:**
+
+```
+┌─ Portfolio P&L Report ────────────────────────┐
+│ Portfolio: default                             │
+│ Period: Last 7 Days                            │
+│ Total P&L: $1,234.56 (1.23%)                  │
+│ Current Equity: $101,234.56                    │
+└────────────────────────────────────────────────┘
+
+┌─ P&L by Symbol ───────────────────────────────────────────────────────────┐
+│ Symbol      │ Total P&L  │ Realized    │ Unrealized    │ Trades │ Win Rate │
+├─────────────┼────────────┼─────────────┼───────────────┼────────┼──────────┤
+│ BTC/USDT    │ $1,200.50  │ $1,150.00   │ $50.50        │ 15     │ 66.7%    │
+│ ETH/USDT    │ $345.20    │ $300.00     │ $45.20        │ 10     │ 70.0%    │
+│ SOL/USDT    │ -$150.30   │ -$200.00    │ $49.70        │ 8      │ 37.5%    │
+└─────────────┴────────────┴─────────────┴───────────────┴────────┴──────────┘
+```
+
 ## Token Tracking
 
 Monitor Claude API token usage, estimate costs, and track rate limits.
