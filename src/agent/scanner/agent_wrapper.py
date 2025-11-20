@@ -247,7 +247,7 @@ class AgentWrapper:
 
                 else:
                     # Log all non-AssistantMessage types for debugging
-                    logger.info(f"📦 Non-assistant message: {message_type}")
+                    logger.debug(f"📦 Non-assistant message: {message_type}")
                     if hasattr(message, '__dict__'):
                         logger.debug(f"   Content: {message.__dict__}")
 
