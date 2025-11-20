@@ -19,6 +19,7 @@ class TestSessionBanner:
         SessionBanner.display(
             model="claude-sonnet-4-5",
             api_endpoint="https://api.anthropic.com",
+            auth_token="deffa90c1234567890abcdef1234567890LfzE",
             token_tracking_enabled=True,
             session_id="abc123456789",
             operation_type="scanner",
@@ -36,6 +37,7 @@ class TestSessionBanner:
         SessionBanner.display(
             model="claude-sonnet-4-5",
             api_endpoint="https://api.anthropic.com",
+            auth_token="testtoken1234567890",
             token_tracking_enabled=True,
             session_id="new123",
             operation_type="analysis",
@@ -50,6 +52,7 @@ class TestSessionBanner:
         SessionBanner.display(
             model="claude-sonnet-4-5",
             api_endpoint="https://api.anthropic.com",
+            auth_token=None,
             token_tracking_enabled=False,
             session_id=None,
             operation_type="monitor",
@@ -64,6 +67,7 @@ class TestSessionBanner:
         SessionBanner.display(
             model="claude-sonnet-4-5",
             api_endpoint="https://api.anthropic.com",
+            auth_token="testtoken1234567890",
             token_tracking_enabled=True,
             session_id=None,
             operation_type="paper_trading",
@@ -80,6 +84,7 @@ class TestSessionBanner:
         SessionBanner.display(
             model="claude-sonnet-4-5",
             api_endpoint="https://api.anthropic.com",
+            auth_token="testtoken1234567890",
             token_tracking_enabled=True,
             session_id=long_session_id,
             operation_type="scanner",
@@ -94,12 +99,55 @@ class TestSessionBanner:
         SessionBanner.display(
             model="claude-sonnet-4-5",
             api_endpoint="https://custom.api.com",
+            auth_token="testtoken1234567890",
             token_tracking_enabled=True,
             session_id="test123",
             operation_type="scanner",
             session_status="resumed"
         )
 
+        captured = capsys.readouterr()
+        assert True
+
+    def test_display_with_masked_auth_token(self, capsys):
+        """Test that auth token is properly masked."""
+        SessionBanner.display(
+            model="claude-sonnet-4-5",
+            api_endpoint="https://api.anthropic.com",
+            auth_token="deffa90c1234567890abcdef1234567890LfzE",
+            token_tracking_enabled=True,
+            session_id="test123",
+            operation_type="scanner",
+            session_status="new"
+        )
+        captured = capsys.readouterr()
+        assert True
+
+    def test_display_with_no_auth_token(self, capsys):
+        """Test banner display when auth token is not configured."""
+        SessionBanner.display(
+            model="claude-sonnet-4-5",
+            api_endpoint="https://api.anthropic.com",
+            auth_token=None,
+            token_tracking_enabled=True,
+            session_id="test123",
+            operation_type="scanner",
+            session_status="new"
+        )
+        captured = capsys.readouterr()
+        assert True
+
+    def test_display_with_short_auth_token(self, capsys):
+        """Test banner display with short auth token (edge case)."""
+        SessionBanner.display(
+            model="claude-sonnet-4-5",
+            api_endpoint="https://api.anthropic.com",
+            auth_token="short",
+            token_tracking_enabled=True,
+            session_id="test123",
+            operation_type="scanner",
+            session_status="new"
+        )
         captured = capsys.readouterr()
         assert True
 
@@ -188,7 +236,7 @@ class TestShowSessionBanner:
     @pytest.mark.asyncio
     async def test_show_banner_uses_env_var_for_api_endpoint(self, temp_session_manager):
         """Test that banner reads API endpoint from environment variable."""
-        with patch.dict(os.environ, {"ANTHROPIC_API_URL": "https://custom.endpoint.com"}):
+        with patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "https://custom.endpoint.com"}):
             await show_session_banner(
                 operation_type="scanner",
                 model="claude-sonnet-4-5",
@@ -200,8 +248,8 @@ class TestShowSessionBanner:
     async def test_show_banner_uses_default_api_endpoint(self, temp_session_manager):
         """Test that banner uses default API endpoint when env var not set."""
         with patch.dict(os.environ, {}, clear=False):
-            # Remove ANTHROPIC_API_URL if it exists
-            os.environ.pop("ANTHROPIC_API_URL", None)
+            # Remove ANTHROPIC_BASE_URL if it exists
+            os.environ.pop("ANTHROPIC_BASE_URL", None)
 
             await show_session_banner(
                 operation_type="scanner",

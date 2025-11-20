@@ -23,6 +23,7 @@ class SessionBanner:
     def display(
         model: str,
         api_endpoint: str,
+        auth_token: Optional[str],
         token_tracking_enabled: bool,
         session_id: Optional[str],
         operation_type: str,
@@ -34,6 +35,7 @@ class SessionBanner:
         Args:
             model: Model name (e.g., "claude-sonnet-4-5")
             api_endpoint: Anthropic API endpoint URL
+            auth_token: Anthropic auth token (will be masked for display)
             token_tracking_enabled: Whether token tracking is enabled
             session_id: Session ID if available (will be truncated for display)
             operation_type: Type of operation (scanner, analysis, monitor, paper_trading)
@@ -49,6 +51,18 @@ class SessionBanner:
         # Add rows
         table.add_row("Model:", model)
         table.add_row("API Endpoint:", api_endpoint)
+
+        # Add auth token row with masking
+        if auth_token:
+            # Mask token: show first 8 and last 4 chars
+            if len(auth_token) >= 12:
+                masked_token = f"{auth_token[:8]}...{auth_token[-4:]}"
+            else:
+                # For short tokens, just show asterisks
+                masked_token = "*" * len(auth_token)
+            table.add_row("Auth Token:", masked_token)
+        else:
+            table.add_row("Auth Token:", "[dim]Not configured[/dim]")
 
         # Token tracking status with indicator
         if token_tracking_enabled:
@@ -109,9 +123,9 @@ async def show_session_banner(
         Does not raise exceptions - logs warnings on failure
     """
     try:
-        # Get API endpoint from config (with fallback)
-        import os
-        api_endpoint = os.getenv("ANTHROPIC_API_URL", "https://api.anthropic.com")
+        # Get API endpoint and auth token from config
+        api_endpoint = config.ANTHROPIC_BASE_URL
+        auth_token = config.ANTHROPIC_AUTH_TOKEN
 
         # Get token tracking status
         token_tracking_enabled = config.TOKEN_TRACKING_ENABLED
@@ -134,6 +148,7 @@ async def show_session_banner(
         SessionBanner.display(
             model=model,
             api_endpoint=api_endpoint,
+            auth_token=auth_token,
             token_tracking_enabled=token_tracking_enabled,
             session_id=session_id,
             operation_type=operation_type,
