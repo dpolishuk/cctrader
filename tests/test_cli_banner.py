@@ -4,6 +4,7 @@ import pytest_asyncio
 from pathlib import Path
 import tempfile
 import os
+import sys
 from unittest.mock import patch, MagicMock
 from io import StringIO
 
@@ -111,45 +112,54 @@ class TestSessionBanner:
 
     def test_display_with_masked_auth_token(self, capsys):
         """Test that auth token is properly masked."""
-        SessionBanner.display(
-            model="claude-sonnet-4-5",
-            api_endpoint="https://api.anthropic.com",
-            auth_token="deffa90c1234567890abcdef1234567890LfzE",
-            token_tracking_enabled=True,
-            session_id="test123",
-            operation_type="scanner",
-            session_status="new"
-        )
-        captured = capsys.readouterr()
-        assert True
+        # Capture Rich console output
+        with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
+            SessionBanner.display(
+                model="claude-sonnet-4-5",
+                api_endpoint="https://api.anthropic.com",
+                auth_token="deffa90c1234567890abcdef1234567890LfzE",
+                token_tracking_enabled=True,
+                session_id="test123",
+                operation_type="scanner",
+                session_status="new"
+            )
+            output = mock_stdout.getvalue()
+            # Assert that the masked token appears in the output
+            assert "deffa90c...LfzE" in output
 
     def test_display_with_no_auth_token(self, capsys):
         """Test banner display when auth token is not configured."""
-        SessionBanner.display(
-            model="claude-sonnet-4-5",
-            api_endpoint="https://api.anthropic.com",
-            auth_token=None,
-            token_tracking_enabled=True,
-            session_id="test123",
-            operation_type="scanner",
-            session_status="new"
-        )
-        captured = capsys.readouterr()
-        assert True
+        # Capture Rich console output
+        with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
+            SessionBanner.display(
+                model="claude-sonnet-4-5",
+                api_endpoint="https://api.anthropic.com",
+                auth_token=None,
+                token_tracking_enabled=True,
+                session_id="test123",
+                operation_type="scanner",
+                session_status="new"
+            )
+            output = mock_stdout.getvalue()
+            # Assert that "Not configured" appears in the output
+            assert "Not configured" in output
 
     def test_display_with_short_auth_token(self, capsys):
         """Test banner display with short auth token (edge case)."""
-        SessionBanner.display(
-            model="claude-sonnet-4-5",
-            api_endpoint="https://api.anthropic.com",
-            auth_token="short",
-            token_tracking_enabled=True,
-            session_id="test123",
-            operation_type="scanner",
-            session_status="new"
-        )
-        captured = capsys.readouterr()
-        assert True
+        # Capture Rich console output
+        with patch('sys.stdout', new_callable=StringIO) as mock_stdout:
+            SessionBanner.display(
+                model="claude-sonnet-4-5",
+                api_endpoint="https://api.anthropic.com",
+                auth_token="short",
+                token_tracking_enabled=True,
+                session_id="test123",
+                operation_type="scanner",
+                session_status="new"
+            )
+            output = mock_stdout.getvalue()
+            # Assert that asterisks appear in the output (masking short tokens)
+            assert "*****" in output
 
 
 @pytest_asyncio.fixture
