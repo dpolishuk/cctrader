@@ -1,7 +1,9 @@
 """Tests for P&L report display formatting."""
 import pytest
 from datetime import datetime
-from src.agent.display.pnl_report import format_currency, format_percentage, create_pnl_table
+from unittest.mock import AsyncMock, patch
+from src.agent.display.pnl_report import format_currency, format_percentage, create_pnl_table, display_pnl_report
+from src.agent.database.paper_operations import PaperTradingDatabase
 
 
 def test_format_currency_positive():
@@ -66,3 +68,46 @@ def test_create_pnl_table_empty():
 
     assert table.title == "P&L by Symbol"
     assert table.row_count == 0
+
+
+@pytest.mark.asyncio
+async def test_display_pnl_report_portfolio_not_found(tmp_path):
+    """Test error handling when portfolio doesn't exist."""
+    from src.agent.database.paper_schema import init_paper_trading_db
+
+    db_path = tmp_path / "test.db"
+    await init_paper_trading_db(db_path)
+    db = PaperTradingDatabase(db_path)
+
+    # Should raise ValueError
+    with pytest.raises(ValueError, match="Portfolio 'nonexistent' not found"):
+        await display_pnl_report(db, "nonexistent", "all", 1)
+
+
+@pytest.mark.asyncio
+async def test_display_pnl_report_success(tmp_path, capsys):
+    """Test successful P&L report display."""
+    from src.agent.database.paper_schema import init_paper_trading_db
+
+    db_path = tmp_path / "test.db"
+    await init_paper_trading_db(db_path)
+    db = PaperTradingDatabase(db_path)
+
+    # Create portfolio with trades
+    portfolio_id = await db.create_portfolio(name="test", starting_capital=10000.0)
+    await db.record_trade(
+        portfolio_id=portfolio_id,
+        symbol="BTC/USDT",
+        trade_type="CLOSE",
+        price=50000.0,
+        quantity=0.1,
+        execution_mode="realistic",
+        slippage_pct=0.1,
+        actual_fill_price=50005.0,
+        realized_pnl=100.0
+    )
+
+    # Display report (should not raise)
+    await display_pnl_report(db, "test", "all", 0)
+
+    # Output captured by Rich console would be tested in integration tests

@@ -93,3 +93,75 @@ def create_pnl_table(data: List[Dict[str, Any]]) -> Table:
     )
 
     return table
+
+
+async def display_pnl_report(
+    db: 'PaperTradingDatabase',
+    portfolio_name: str,
+    period: str = 'all',
+    min_trades: int = 1
+) -> None:
+    """
+    Display P&L report with Rich formatting.
+
+    Args:
+        db: PaperTradingDatabase instance
+        portfolio_name: Name of portfolio
+        period: Time period ('all', 'daily', 'weekly', 'monthly')
+        min_trades: Minimum trades to include symbol
+
+    Raises:
+        ValueError: If portfolio not found
+    """
+    from src.agent.database.paper_operations import PaperTradingDatabase
+
+    console = Console()
+
+    # Get portfolio
+    portfolio = await db.get_portfolio_by_name(portfolio_name)
+    if not portfolio:
+        raise ValueError(f"Portfolio '{portfolio_name}' not found")
+
+    # Calculate date range based on period
+    end_date = datetime.now()
+    start_date = None
+
+    if period == 'daily':
+        start_date = end_date - timedelta(days=7)
+        period_label = "Last 7 Days"
+    elif period == 'weekly':
+        start_date = end_date - timedelta(weeks=4)
+        period_label = "Last 4 Weeks"
+    elif period == 'monthly':
+        start_date = end_date - timedelta(days=365)
+        period_label = "Last 12 Months"
+    else:
+        period_label = "All Time"
+
+    # Get P&L data
+    data = await db.get_symbol_pnl_summary(
+        portfolio_id=portfolio['id'],
+        start_date=start_date,
+        end_date=end_date,
+        min_trades=min_trades
+    )
+
+    # Display header
+    total_pnl = sum(row['total_pnl'] for row in data) if data else 0
+    pnl_pct = (total_pnl / portfolio['starting_capital'] * 100) if portfolio['starting_capital'] > 0 else 0
+
+    header_text = f"""[bold]Portfolio:[/bold] {portfolio_name}
+[bold]Period:[/bold] {period_label}
+[bold]Total P&L:[/bold] {format_currency(total_pnl)} ({format_percentage(pnl_pct)})
+[bold]Current Equity:[/bold] {format_currency(portfolio['current_equity'])}"""
+
+    header = Panel(header_text, title="Portfolio P&L Report", border_style="blue")
+    console.print(header)
+    console.print()
+
+    # Display table
+    if not data:
+        console.print("[yellow]No trading activity found for this period.[/yellow]")
+    else:
+        table = create_pnl_table(data)
+        console.print(table)
