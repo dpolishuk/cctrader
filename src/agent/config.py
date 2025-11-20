@@ -57,6 +57,7 @@ class Config:
 
     # Token Tracking
     TOKEN_TRACKING_ENABLED: bool = os.getenv("TOKEN_TRACKING_ENABLED", "true").lower() == "true"
+    TOKEN_INTERVAL_MINUTES: int = int(os.getenv("TOKEN_INTERVAL_MINUTES", "5"))
     CLAUDE_HOURLY_LIMIT: int = int(os.getenv("CLAUDE_HOURLY_LIMIT", "500"))
     CLAUDE_DAILY_LIMIT: int = int(os.getenv("CLAUDE_DAILY_LIMIT", "5000"))
     CLAUDE_COST_PER_1M_INPUT: float = float(os.getenv("CLAUDE_COST_PER_1M_INPUT", "3.00"))
