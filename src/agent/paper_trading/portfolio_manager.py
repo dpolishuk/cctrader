@@ -1,6 +1,6 @@
 """Portfolio management for paper trading."""
 from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from src.agent.database.paper_operations import PaperTradingDatabase
@@ -396,6 +396,81 @@ class PaperPortfolioManager:
             return 0.0
 
         return (total_exposure / current_equity) * 100
+
+    async def calculate_daily_pnl_pct(self) -> float:
+        """
+        Calculate daily P&L percentage (realized + unrealized).
+
+        Returns:
+            Daily P&L as percentage of starting equity
+        """
+        portfolio = await self.db.get_portfolio(self.portfolio_id)
+        starting_capital = portfolio['starting_capital']
+
+        # Get trades from today (realized P&L)
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        trades = await self.db.get_trade_history(self.portfolio_id, limit=1000)
+
+        daily_realized_pnl = sum(
+            trade.get('realized_pnl', 0) or 0
+            for trade in trades
+            if trade.get('executed_at') and
+               datetime.fromisoformat(trade['executed_at'].replace('Z', '+00:00')) >= today_start
+        )
+
+        # Get unrealized P&L from open positions
+        positions = await self.db.get_open_positions(self.portfolio_id)
+        daily_unrealized_pnl = sum(pos.get('unrealized_pnl', 0) or 0 for pos in positions)
+
+        # Calculate total daily P&L percentage
+        total_daily_pnl = daily_realized_pnl + daily_unrealized_pnl
+
+        if starting_capital <= 0:
+            return 0.0
+
+        return (total_daily_pnl / starting_capital) * 100
+
+    async def calculate_weekly_pnl_pct(self) -> float:
+        """
+        Calculate weekly P&L percentage (last 7 days).
+
+        Returns:
+            Weekly P&L as percentage of starting equity
+        """
+        portfolio = await self.db.get_portfolio(self.portfolio_id)
+        starting_capital = portfolio['starting_capital']
+
+        # Get trades from last 7 days
+        week_start = datetime.now() - timedelta(days=7)
+        trades = await self.db.get_trade_history(self.portfolio_id, limit=1000)
+
+        weekly_realized_pnl = sum(
+            trade.get('realized_pnl', 0) or 0
+            for trade in trades
+            if trade.get('executed_at') and
+               datetime.fromisoformat(trade['executed_at'].replace('Z', '+00:00')) >= week_start
+        )
+
+        # Get unrealized P&L from open positions
+        positions = await self.db.get_open_positions(self.portfolio_id)
+        weekly_unrealized_pnl = sum(pos.get('unrealized_pnl', 0) or 0 for pos in positions)
+
+        # Calculate total weekly P&L percentage
+        total_weekly_pnl = weekly_realized_pnl + weekly_unrealized_pnl
+
+        if starting_capital <= 0:
+            return 0.0
+
+        return (total_weekly_pnl / starting_capital) * 100
+
+    async def get_open_positions(self) -> List[Dict[str, Any]]:
+        """
+        Get all open positions.
+
+        Returns:
+            List of open position dictionaries
+        """
+        return await self.db.get_open_positions(self.portfolio_id)
 
     async def get_portfolio_summary(self) -> Dict[str, Any]:
         """Get comprehensive portfolio summary."""

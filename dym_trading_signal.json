@@ -1,0 +1,156 @@
+{
+  "timestamp": "2025-11-20T00:00:00Z",
+  "symbol": "DYM/USDT",
+  "signal_type": "SHORT",
+  "confidence": 70,
+  "entry_price": 0.1839,
+  "stop_loss": 0.1931,
+  "take_profit": 0.1655,
+  "position_size_usd": 4000.0,
+  "risk_amount_usd": 200.0,
+  "risk_percentage": 2.0,
+
+  "score_breakdown": {
+    "technical_score": 25,
+    "technical_max": 40,
+    "sentiment_score": 25,
+    "sentiment_max": 30,
+    "liquidity_score": 10,
+    "liquidity_max": 20,
+    "correlation_score": 10,
+    "correlation_max": 10,
+    "total_confidence": 70,
+    "total_max": 100
+  },
+
+  "technical_analysis": {
+    "timeframes": {
+      "1m": {
+        "price": 0.1844,
+        "rsi": 49.14,
+        "trend": "BULLISH",
+        "macd_signal": "BEARISH_CROSS",
+        "price_change_20_periods": -6.49
+      },
+      "5m": {
+        "price": 0.1844,
+        "rsi": 65.09,
+        "trend": "BULLISH",
+        "macd_signal": "BULLISH",
+        "price_change_20_periods": 28.77
+      },
+      "15m": {
+        "price": 0.1839,
+        "rsi": 71.53,
+        "status": "OVERBOUGHT",
+        "trend": "BULLISH",
+        "macd_signal": "BULLISH",
+        "price_change_20_periods": 58.67
+      },
+      "1h": {
+        "price": 0.1839,
+        "rsi": 82.49,
+        "status": "EXTREMELY_OVERBOUGHT",
+        "trend": "BULLISH",
+        "macd_signal": "BULLISH",
+        "price_change_20_periods": 146.51
+      },
+      "4h": {
+        "price": 0.1839,
+        "rsi": 93.42,
+        "status": "EXTREMELY_OVERBOUGHT",
+        "trend": "BULLISH",
+        "macd_signal": "BULLISH",
+        "price_change_20_periods": 128.73
+      }
+    },
+    "bearish_signals": 4.5,
+    "total_signals": 15,
+    "key_findings": [
+      "RSI overbought on 15m (71.53), 1h (82.49), 4h (93.42)",
+      "Massive rally: +146% on 1h, +128% on 4h - unsustainable",
+      "MACD bearish cross on 1m timeframe",
+      "Price exhaustion after vertical move"
+    ]
+  },
+
+  "market_sentiment": {
+    "fear_greed_index": 29,
+    "sentiment": "FEAR",
+    "tradingview_indicators": {
+      "bearish": 23,
+      "bullish": 6,
+      "ratio": "79% bearish"
+    },
+    "price_action": "PUMP_AND_DUMP",
+    "price_pattern": "+75.62% in 4h, then -6.76% in 1h reversal",
+    "analyst_prediction": "-24.91% drop to $0.067 by Nov 30",
+    "catalyst_status": "Post-mainnet euphoria fading",
+    "key_risks": [
+      "Extreme volatility continues",
+      "Speculative trading dominates",
+      "Community FOMO may extend pump temporarily"
+    ]
+  },
+
+  "liquidity_analysis": {
+    "volume_24h_usd": 3624040,
+    "price_change_24h": 133.38,
+    "liquidity_rating": "MODERATE",
+    "execution_risk": "LOW_TO_MODERATE",
+    "notes": "Sufficient volume for $4K position, slippage expected <0.5%"
+  },
+
+  "btc_correlation": {
+    "correlation_1h_50_periods": 0.067,
+    "correlation_status": "LOW",
+    "independence": "HIGH",
+    "notes": "DYM moving independently of BTC - isolated pump"
+  },
+
+  "risk_management": {
+    "portfolio_size": 10000,
+    "position_size": 4000,
+    "position_percentage": 40.0,
+    "risk_amount": 200,
+    "risk_percentage": 2.0,
+    "stop_loss_distance": 5.0,
+    "take_profit_distance": 10.0,
+    "risk_reward_ratio": 2.0,
+    "max_loss_usd": 200,
+    "expected_profit_usd": 400
+  },
+
+  "trade_rationale": [
+    "Extremely overbought RSI across all major timeframes (93.42 on 4h)",
+    "Classic pump & dump pattern: massive rally followed by initial reversal",
+    "Bearish sentiment: Fear index at 29, 79% bearish technical indicators",
+    "Analysts predicting -24.91% correction to $0.067",
+    "Post-mainnet launch catalyst exhausted",
+    "Low BTC correlation means isolated speculative move",
+    "Moderate liquidity supports safe execution",
+    "Excellent risk/reward at 1:2 ratio"
+  ],
+
+  "trade_execution": {
+    "recommended_action": "OPEN SHORT POSITION",
+    "urgency": "HIGH",
+    "execution_method": "Market order or limit at $0.184",
+    "stop_loss_type": "HARD STOP at $0.1931 (+5%)",
+    "take_profit_type": "LIMIT at $0.1655 (-10%)",
+    "position_scaling": "Single entry, no averaging",
+    "monitoring": "Check every 15-30 minutes initially"
+  },
+
+  "warnings": [
+    "Momentum can extend further before reversal",
+    "Volatility remains extremely high",
+    "Set alerts for stop loss breach",
+    "Consider partial profit taking at $0.17 (-7.5%)",
+    "Do not add to position if price moves against you"
+  ],
+
+  "high_probability_trade": true,
+  "recommendation": "EXECUTE SHORT",
+  "analyst_note": "This is a high-confidence short setup based on extreme technical overbought conditions, bearish sentiment divergence, and classic pump-and-dump pattern recognition. The 70/100 confidence score exceeds the 60-point threshold for execution. Risk is well-managed at 2% of portfolio with a favorable 1:2 risk/reward ratio."
+}
