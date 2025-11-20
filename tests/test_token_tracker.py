@@ -185,3 +185,52 @@ async def test_interval_accumulation(tmp_path):
 
     # Clean up
     await tracker.end_session()
+
+
+@pytest.mark.asyncio
+async def test_interval_completion_and_rotation(tmp_path, monkeypatch):
+    """Test interval completes and rotates when duration elapsed."""
+    db_path = tmp_path / "test.db"
+
+    # Set interval to 1 second for testing
+    monkeypatch.setenv("TOKEN_INTERVAL_MINUTES", "0.0167")  # ~1 second
+    from src.agent.config import Config
+    test_config = Config()
+
+    # Initialize database schema
+    import aiosqlite
+    async with aiosqlite.connect(db_path) as db:
+        await create_token_tracking_tables(db)
+        await db.commit()
+
+    tracker = TokenTracker(db_path=db_path, operation_mode="test", pricing_calculator=None)
+    # Override config
+    tracker.INTERVAL_DURATION = 1.0
+
+    await tracker.start_session()
+
+    class MockResult:
+        usage = {'input_tokens': 100, 'output_tokens': 50}
+        model = 'claude-3-5-sonnet-20241022'
+
+    # Record usage in interval 1
+    await tracker.record_usage(MockResult(), operation_type="test")
+    assert tracker.interval_number == 1
+    assert len(tracker.completed_intervals) == 0
+
+    # Wait for interval to complete
+    import asyncio
+    await asyncio.sleep(1.1)
+
+    # Record usage to trigger check
+    await tracker.record_usage(MockResult(), operation_type="test")
+
+    # Should have completed interval 1 and moved to interval 2
+    assert tracker.interval_number == 2
+    assert len(tracker.completed_intervals) == 1
+    assert tracker.completed_intervals[0]['interval_number'] == 1
+    assert tracker.completed_intervals[0]['tokens_input'] == 100
+    assert tracker.completed_intervals[0]['tokens_output'] == 50
+
+    # Clean up
+    await tracker.end_session()

@@ -1,11 +1,14 @@
 """Core token tracker for Claude Agent SDK."""
 import time
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 
 from src.agent.tracking.pricing import TokenPricingCalculator
 from src.agent.database.token_operations import TokenDatabase
 from src.agent.config import config
+
+logger = logging.getLogger(__name__)
 
 
 class TokenTracker:
@@ -101,6 +104,9 @@ class TokenTracker:
         # Calculate cost
         cost_usd = self.pricing.calculate_cost(tokens_input, tokens_output)
 
+        # Check if interval should complete BEFORE accumulating new data
+        self._check_and_complete_interval()
+
         # Record in database
         await self.db.record_token_usage(
             session_id=self.session_id,
@@ -118,6 +124,51 @@ class TokenTracker:
         self.current_interval['tokens_output'] += tokens_output
         self.current_interval['cost'] += cost_usd
         self.current_interval['requests'] += 1
+
+    def _check_and_complete_interval(self):
+        """Check if interval duration elapsed and complete it if so."""
+        if not self.interval_start_time:
+            return False
+
+        elapsed = time.time() - self.interval_start_time
+
+        if elapsed >= self.INTERVAL_DURATION:
+            # Complete current interval
+            interval_data = {
+                'interval_number': self.interval_number,
+                'duration_seconds': elapsed,
+                'tokens_input': self.current_interval['tokens_input'],
+                'tokens_output': self.current_interval['tokens_output'],
+                'tokens_total': self.current_interval['tokens_input'] + self.current_interval['tokens_output'],
+                'cost': self.current_interval['cost'],
+                'requests': self.current_interval['requests']
+            }
+
+            self.completed_intervals.append(interval_data)
+
+            # Log interval summary
+            logger.info(
+                f"[+{self.interval_number * config.TOKEN_INTERVAL_MINUTES}min] "
+                f"Interval {self.interval_number}: "
+                f"{interval_data['tokens_total']:,} tokens "
+                f"({interval_data['tokens_input']:,} in, {interval_data['tokens_output']:,} out) | "
+                f"Cost: ${interval_data['cost']:.4f} | "
+                f"{interval_data['requests']} requests"
+            )
+
+            # Reset for next interval
+            self.interval_number += 1
+            self.interval_start_time = time.time()
+            self.current_interval = {
+                'tokens_input': 0,
+                'tokens_output': 0,
+                'cost': 0.0,
+                'requests': 0
+            }
+
+            return True
+
+        return False
 
     async def get_session_stats(self) -> Dict[str, Any]:
         """
@@ -157,5 +208,19 @@ class TokenTracker:
     async def end_session(self):
         """End the current tracking session."""
         if self.session_id:
+            # Capture final partial interval if any usage recorded
+            if self.current_interval['requests'] > 0:
+                elapsed = time.time() - self.interval_start_time if self.interval_start_time else 0
+                interval_data = {
+                    'interval_number': self.interval_number,
+                    'duration_seconds': elapsed,
+                    'tokens_input': self.current_interval['tokens_input'],
+                    'tokens_output': self.current_interval['tokens_output'],
+                    'tokens_total': self.current_interval['tokens_input'] + self.current_interval['tokens_output'],
+                    'cost': self.current_interval['cost'],
+                    'requests': self.current_interval['requests']
+                }
+                self.completed_intervals.append(interval_data)
+
             await self.db.end_session(self.session_id)
             self.is_active = False
