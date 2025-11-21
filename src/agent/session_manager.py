@@ -30,6 +30,19 @@ class SessionManager:
         """
         self.db_path = db_path
 
+    def generate_daily_session_id(self, operation_type: str) -> str:
+        """
+        Generate daily session ID with format: {operation_type}-YYYY-MM-DD.
+
+        Args:
+            operation_type: Type of operation (scanner, analysis, etc.)
+
+        Returns:
+            Daily session ID string
+        """
+        today = datetime.now().strftime("%Y-%m-%d")
+        return f"{operation_type}-{today}"
+
     async def init_db(self):
         """Create sessions table if it doesn't exist."""
         async with aiosqlite.connect(self.db_path) as db:
