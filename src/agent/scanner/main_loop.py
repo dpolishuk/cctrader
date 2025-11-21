@@ -24,23 +24,26 @@ class MarketMoversScanner:
         portfolio,
         db,
         config: Optional[ScannerConfig] = None,
-        risk_config: Optional[RiskConfig] = None
+        risk_config: Optional[RiskConfig] = None,
+        daily_mode: bool = False
     ):
         """
         Initialize market movers scanner.
 
         Args:
             exchange: CCXT exchange instance
-            agent: Claude Agent instance
+            agent: Claude Agent instance (AgentWrapper)
             portfolio: Portfolio manager
             db: Database operations instance
             config: Scanner configuration (optional)
             risk_config: Risk configuration (optional)
+            daily_mode: If True, maintain single session per day (optional)
         """
         self.exchange = exchange
         self.agent = agent
         self.portfolio = portfolio
         self.db = db
+        self.daily_mode = daily_mode
 
         self.config = config or ScannerConfig()
         self.risk_config = risk_config or RiskConfig()
@@ -80,10 +83,14 @@ class MarketMoversScanner:
             # Wait until next scan
             await asyncio.sleep(self.config.scan_interval_seconds)
 
-    def stop(self):
+    async def stop(self):
         """Stop the scanning loop."""
         logger.info("Stopping scanner...")
         self.running = False
+
+        # Clean up agent persistent client if in daily mode
+        if self.daily_mode and hasattr(self.agent, 'cleanup'):
+            await self.agent.cleanup()
 
     async def scan_cycle(self):
         """Execute one complete scan cycle."""

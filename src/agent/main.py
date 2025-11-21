@@ -544,7 +544,7 @@ Speed target: Complete analysis in under 30 seconds.""",
         try:
             await scanner.start()
         except KeyboardInterrupt:
-            scanner.stop()
+            await scanner.stop()
             console.print("\n[yellow]Scanner stopped by user[/yellow]")
         finally:
             # End token tracking session
