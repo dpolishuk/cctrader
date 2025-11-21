@@ -57,15 +57,16 @@ class SessionManager:
             """)
             await db.commit()
 
-    async def get_session_id(self, operation_type: str) -> Optional[str]:
+    async def get_session_id(self, operation_type: str, daily: bool = False) -> Optional[str]:
         """
         Get existing session ID for operation type.
 
         Args:
             operation_type: Type of operation (scanner, analysis, etc.)
+            daily: If True, only return session if it matches today's date
 
         Returns:
-            Session ID if exists, None otherwise
+            Session ID if exists and valid, None otherwise
         """
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
@@ -74,14 +75,23 @@ class SessionManager:
             ) as cursor:
                 row = await cursor.fetchone()
                 if row:
+                    session_id = row[0]
+
+                    # If daily mode, check if session ID matches today's date
+                    if daily:
+                        expected_session_id = self.generate_daily_session_id(operation_type)
+                        if session_id != expected_session_id:
+                            logger.info(f"Session {session_id} is from a previous day, starting fresh")
+                            return None
+
                     # Update last_used_at
                     await db.execute(
                         "UPDATE agent_sessions SET last_used_at = ? WHERE operation_type = ?",
                         (datetime.now(timezone.utc).isoformat(), operation_type)
                     )
                     await db.commit()
-                    logger.info(f"Resuming session for {operation_type}: {row[0]}")
-                    return row[0]
+                    logger.info(f"Resuming session for {operation_type}: {session_id}")
+                    return session_id
         return None
 
     async def save_session_id(
