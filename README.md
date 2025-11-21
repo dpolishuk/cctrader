@@ -59,6 +59,30 @@ Custom query:
 python -m src.agent.main analyze --symbol ETH/USDT "What is the current market sentiment for Ethereum?"
 ```
 
+### Market Movers Scanner
+
+Run automated scanner to detect and analyze high-momentum movers (5%+ price changes):
+
+```bash
+python -m src.agent.main scan-movers --interval 300
+```
+
+#### Daily Session Mode
+
+Maintain a single continuous conversation per trading day for consolidated analysis:
+
+```bash
+# All analyses in one session per day
+python -m src.agent.main scan-movers --daily
+```
+
+**Benefits:**
+- Consolidated view of all trading decisions
+- Better context across analyses
+- Easier review and debugging
+
+See [Daily Session Mode Documentation](docs/daily-session-mode.md) for details.
+
 ### View Signals
 Display recent trading signals from the database:
 ```bash
