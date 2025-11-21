@@ -97,6 +97,9 @@ class MarketMoversScanner:
         trades_executed = 0
         trades_rejected = 0
 
+        # Track sentiment findings per symbol for summary
+        sentiment_summary = {}
+
         # Step 1: Scan for movers
         symbols_list = list(self.symbol_manager.get_symbols().keys())
         movers = await self.momentum_scanner.scan_all_symbols(symbols_list)
@@ -111,7 +114,11 @@ class MarketMoversScanner:
         # Step 3: Deep analysis with agent for each mover
         for mover in top_movers:
             try:
-                signal = await self._analyze_mover_with_agent(mover)
+                signal, sentiment_findings = await self._analyze_mover_with_agent(mover)
+
+                # Store sentiment findings for summary
+                if sentiment_findings:
+                    sentiment_summary[mover['symbol']] = sentiment_findings
 
                 if signal is None:
                     # Agent didn't generate a signal (low confidence or error)
@@ -136,6 +143,29 @@ class MarketMoversScanner:
 
         logger.info(f"⚡ Generated {signals_generated} signals (confidence ≥ 60)")
         logger.info(f"✅ Executed {trades_executed} trades, ❌ Rejected {trades_rejected}")
+
+        # Display sentiment analysis summary
+        if sentiment_summary:
+            logger.info(f"\n{'='*80}")
+            logger.info("📰 SENTIMENT ANALYSIS SUMMARY")
+            logger.info(f"{'='*80}")
+
+            for symbol, findings in sentiment_summary.items():
+                logger.info(f"\n{symbol}:")
+
+                # findings is a list, process the most recent/relevant one
+                if findings and len(findings) > 0:
+                    finding = findings[0]  # Use first/most relevant finding
+
+                    if not finding.get('success') and finding.get('warnings'):
+                        logger.warning(f"  ⚠️  Web search failed - sentiment score defaulted")
+                    elif not finding.get('web_results') or not finding.get('bullet_points'):
+                        logger.info("  • No significant news found")
+                    else:
+                        for point in finding.get('bullet_points', []):
+                            logger.info(f"  {point}")
+
+            logger.info(f"\n{'='*80}\n")
 
         # Step 6: Save cycle metrics
         await self._save_cycle_metrics(
@@ -177,7 +207,7 @@ class MarketMoversScanner:
         filtered.sort(key=lambda x: x['max_change'], reverse=True)
         return filtered[:self.config.max_movers_per_scan]
 
-    async def _analyze_mover_with_agent(self, mover: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def _analyze_mover_with_agent(self, mover: Dict[str, Any]) -> tuple[Optional[Dict[str, Any]], list]:
         """
         Invoke Claude Agent to analyze a mover.
 
@@ -185,7 +215,7 @@ class MarketMoversScanner:
             mover: Mover context (symbol, direction, changes, price, volume)
 
         Returns:
-            Signal dict if confidence >= 60, None otherwise
+            Tuple of (Signal dict if confidence >= 60 else None, sentiment_findings list)
         """
         logger.info(f"\n🤖 Analyzing {mover['symbol']} ({mover['direction']}) {mover['change_1h']:+.2f}% (1h)")
 
@@ -215,6 +245,9 @@ class MarketMoversScanner:
             # Invoke agent
             response = await self.agent.run(prompt, symbol=mover['symbol'])
 
+            # Get sentiment findings from agent
+            sentiment_findings = self.agent.get_sentiment_findings() if hasattr(self.agent, 'get_sentiment_findings') else []
+
             # Extract confidence
             confidence = response.get('confidence', 0)
 
@@ -228,7 +261,7 @@ class MarketMoversScanner:
                     reason='CONFIDENCE_BELOW_THRESHOLD',
                     details=f"Confidence {confidence} < {self.config.min_confidence}"
                 )
-                return None
+                return None, sentiment_findings
 
             # Build signal dict
             signal = {
@@ -246,11 +279,11 @@ class MarketMoversScanner:
             }
 
             logger.info(f"✅ Signal generated - Confidence: {confidence}/100")
-            return signal
+            return signal, sentiment_findings
 
         except Exception as e:
             logger.error(f"❌ Agent analysis failed: {e}", exc_info=True)
-            return None
+            return None, []
 
     async def _execute_signal(self, signal: Dict[str, Any]):
         """
@@ -269,6 +302,21 @@ class MarketMoversScanner:
         logger.info(f"TP1:        ${signal['tp1']:.2f}")
         logger.info(f"{'─'*80}\n")
 
+        # Calculate position sizing
+        portfolio_value = self.portfolio.get_total_value()
+        confidence_normalized = signal['confidence'] / 100.0  # Convert to 0-1 range
+
+        # Base position size: 2-5% of portfolio based on confidence
+        base_pct = 2.0 + (confidence_normalized * 3.0)  # 2% at 0 confidence, 5% at 1.0
+        position_size_usd = portfolio_value * (base_pct / 100)
+
+        # Calculate risk amount (distance from entry to stop loss)
+        entry_price = signal['entry_price']
+        stop_loss = signal['stop_loss']
+        risk_per_unit = abs(entry_price - stop_loss)
+        quantity = position_size_usd / entry_price
+        risk_amount_usd = quantity * risk_per_unit
+
         # Save signal to database first
         signal_id = await self.db.save_mover_signal(
             symbol=signal['symbol'],
@@ -277,6 +325,8 @@ class MarketMoversScanner:
             entry_price=signal['entry_price'],
             stop_loss=signal['stop_loss'],
             tp1=signal['tp1'],
+            position_size_usd=position_size_usd,
+            risk_amount_usd=risk_amount_usd,
             technical_score=signal.get('technical_score'),
             sentiment_score=signal.get('sentiment_score'),
             liquidity_score=signal.get('liquidity_score'),
@@ -284,19 +334,28 @@ class MarketMoversScanner:
             analysis=signal.get('analysis', '')
         )
 
-        # Execute paper trade
-        await self.portfolio.execute_paper_trade(
-            symbol=signal['symbol'],
-            side=signal['direction'],
-            entry_price=signal['entry_price'],
-            stop_loss=signal['stop_loss'],
-            take_profit=signal['tp1'],
-            confidence=signal['confidence'],
-            signal_id=signal_id
+        # Execute paper trade using execute_signal method
+        # Map direction (LONG/SHORT) to signal type (BUY/SELL)
+        signal_type = 'STRONG_BUY' if signal['direction'] == 'LONG' else 'STRONG_SELL'
+
+        trade_signal = {
+            'symbol': signal['symbol'],
+            'type': signal_type,
+            'confidence': confidence_normalized,
+        }
+
+        result = await self.portfolio.execute_signal(
+            signal=trade_signal,
+            current_price=signal['entry_price'],
+            market_data=None
         )
 
-        logger.info(f"✓ Position created (Signal ID: {signal_id})")
-        logger.info(f"✓ Monitoring activated\n")
+        if result['executed']:
+            logger.info(f"✓ Position created (Signal ID: {signal_id})")
+            logger.info(f"✓ Monitoring activated\n")
+        else:
+            logger.warning(f"⚠ Trade execution issue: {result.get('reason', 'Unknown')}")
+            logger.info(f"Signal saved as ID: {signal_id}\n")
 
     async def _save_rejection(self, signal: Dict[str, Any], reason: str):
         """

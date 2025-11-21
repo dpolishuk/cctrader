@@ -168,6 +168,9 @@ class AgentWrapper:
         tool_call_count = {}
         message_count = 0
 
+        # Track sentiment data for summary
+        self._sentiment_findings = []
+
         try:
             async for message in client.receive_response():
                 # Log raw message type for debugging
@@ -235,6 +238,9 @@ class AgentWrapper:
                             if is_error:
                                 logger.error(f"❌ Tool error (ID: {tool_id}):\n{content}")
                             else:
+                                # Check if this is a sentiment data result
+                                self._process_sentiment_result(block)
+
                                 # Truncate long results
                                 content_str = str(content)
                                 if len(content_str) > 300:
@@ -309,3 +315,86 @@ class AgentWrapper:
             'correlation_score': 0.0,
             'analysis': f'Analysis error: {error_msg}'
         }
+
+    def _process_sentiment_result(self, tool_result_block: ToolResultBlock):
+        """
+        Process sentiment tool result and display web search findings.
+
+        Args:
+            tool_result_block: ToolResultBlock from fetch_sentiment_data
+        """
+        try:
+            import json
+
+            # Extract content from block
+            content = tool_result_block.content if hasattr(tool_result_block, 'content') else str(tool_result_block)
+
+            # Try to parse as JSON
+            if isinstance(content, str):
+                # Check if this looks like a sentiment data result
+                if 'sentiment_summary' not in content:
+                    return
+
+                data = json.loads(content)
+            elif isinstance(content, list) and len(content) > 0:
+                # Content might be a list with text block
+                text_content = content[0].get('text', '') if isinstance(content[0], dict) else str(content[0])
+                if 'sentiment_summary' not in text_content:
+                    return
+                data = json.loads(text_content)
+            else:
+                return
+
+            # Extract key information
+            web_results = data.get('web_results', [])
+            sentiment_summary = data.get('sentiment_summary', '')
+            warnings = data.get('warnings', [])
+            success = data.get('success', False)
+
+            # Display real-time sentiment findings
+            logger.info("📰 Web Search:")
+
+            if not success and warnings:
+                # Failed web search
+                logger.warning(f"   ⚠️  Web search failed - sentiment score defaulted")
+                for warning in warnings:
+                    logger.warning(f"      {warning}")
+            elif not web_results or sentiment_summary == "No web results available for sentiment analysis":
+                # No results found
+                logger.info("   • No significant news found")
+            else:
+                # Extract 2-3 key bullet points from web results
+                bullet_points = []
+                for i, result in enumerate(web_results[:3]):  # Limit to top 3
+                    title = result.get('title', '')
+                    snippet = result.get('snippet', '')
+
+                    # Create concise bullet point
+                    if title:
+                        bullet_points.append(f"• {title[:80]}{'...' if len(title) > 80 else ''}")
+                    elif snippet:
+                        bullet_points.append(f"• {snippet[:80]}{'...' if len(snippet) > 80 else ''}")
+
+                # Display bullet points
+                if bullet_points:
+                    for point in bullet_points:
+                        logger.info(f"   {point}")
+                else:
+                    logger.info("   • No significant news found")
+
+            # Store for summary display later
+            if hasattr(self, '_sentiment_findings'):
+                self._sentiment_findings.append({
+                    'success': success,
+                    'warnings': warnings,
+                    'web_results': web_results,
+                    'summary': sentiment_summary,
+                    'bullet_points': bullet_points if 'bullet_points' in locals() else []
+                })
+
+        except Exception as e:
+            logger.debug(f"Could not process sentiment result: {e}")
+
+    def get_sentiment_findings(self) -> list:
+        """Get collected sentiment findings for summary display."""
+        return getattr(self, '_sentiment_findings', [])

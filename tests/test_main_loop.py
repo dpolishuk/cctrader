@@ -129,6 +129,7 @@ async def test_scan_cycle_with_low_confidence_signal():
         'symbol': 'BTC/USDT',
         'direction': 'LONG',
     })
+    mock_agent.get_sentiment_findings = MagicMock(return_value=[])
 
     mock_portfolio = AsyncMock()
     mock_portfolio.count_open_positions = MagicMock(return_value=0)
@@ -188,6 +189,7 @@ async def test_scan_cycle_executes_high_confidence_signal():
         'correlation_score': 7.0,
         'analysis': 'Strong bullish setup',
     })
+    mock_agent.get_sentiment_findings = MagicMock(return_value=[])
 
     mock_portfolio = AsyncMock()
     mock_portfolio.count_open_positions = MagicMock(return_value=0)
@@ -225,6 +227,13 @@ async def test_scan_cycle_executes_high_confidence_signal():
         'reason': None
     })
 
+    # Mock execute_signal to return success
+    mock_portfolio.execute_signal = AsyncMock(return_value={
+        'executed': True,
+        'action': 'OPEN_LONG',
+        'reason': 'Opened LONG position'
+    })
+
     await scanner.scan_cycle()
 
     # Should call agent
@@ -232,7 +241,7 @@ async def test_scan_cycle_executes_high_confidence_signal():
     # Should save signal
     assert mock_db.save_mover_signal.called
     # Should execute trade
-    assert mock_portfolio.execute_paper_trade.called
+    assert mock_portfolio.execute_signal.called
     # Should save metrics
     assert mock_db.save_movers_metrics.called
 
@@ -252,6 +261,7 @@ async def test_scan_cycle_rejects_signal_failing_risk_check():
         'stop_loss': 48000.0,
         'tp1': 54000.0,
     })
+    mock_agent.get_sentiment_findings = MagicMock(return_value=[])
 
     mock_portfolio = AsyncMock()
     mock_portfolio.count_open_positions = MagicMock(return_value=5)  # At max
