@@ -307,7 +307,8 @@ def reset_breaker(portfolio):
 @cli.command()
 @click.option('--interval', default=300, help='Scan interval in seconds')
 @click.option('--portfolio', default='Market Movers', help='Paper trading portfolio name')
-def scan_movers(interval, portfolio):
+@click.option('--daily', is_flag=True, help='Maintain single session per day (all analyses in one conversation)')
+def scan_movers(interval, portfolio, daily):
     """Run market movers scanner - detects and analyzes 5%+ movers."""
     async def run_scanner():
         from src.agent.tools.market_data import get_exchange
@@ -526,7 +527,8 @@ Speed target: Complete analysis in under 30 seconds.""",
             agent_options,
             token_tracker=token_tracker,
             session_manager=session_manager,
-            operation_type=SessionManager.SCANNER
+            operation_type=SessionManager.SCANNER,
+            persistent_client=daily  # Enable persistent client in daily mode
         )
 
         # Create and start scanner
@@ -534,10 +536,16 @@ Speed target: Complete analysis in under 30 seconds.""",
             exchange=exchange,
             agent=agent,
             portfolio=manager,
-            db=db
+            db=db,
+            daily_mode=daily  # Pass daily mode flag
         )
 
         scanner.config.scan_interval_seconds = interval
+
+        # Log daily mode status
+        if daily:
+            console.print("[green]✓[/green] Daily mode enabled - maintaining single session per day")
+            console.print(f"[dim]  All symbol analyses will be in one continuous conversation[/dim]\n")
 
         console.print("[bold cyan]Scanner initialized. Press Ctrl+C to stop.[/bold cyan]")
 
