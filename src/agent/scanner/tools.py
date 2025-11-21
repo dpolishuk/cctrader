@@ -489,19 +489,20 @@ def analyze_sentiment_from_results(web_results: List[Dict[str, str]]) -> tuple[s
 @tool(
     name="fetch_sentiment_data",
     description="""
-    Fetch complete sentiment analysis data in one call.
+    Generate a sentiment analysis query for a trading symbol.
 
-    Automatically generates a sentiment query and executes web search.
-    Returns sentiment summary and web search results combined.
+    Returns a well-structured search query that Claude Code should use with the WebSearch tool
+    to gather market sentiment, news, and catalysts.
 
-    This tool handles the entire sentiment gathering workflow in one operation.
+    NOTE: This tool does NOT execute web search. Web search must be done by Claude Code
+    using the WebSearch tool with the returned query.
 
     Args:
         symbol: Trading pair (e.g., "BTCUSDT")
         context: Optional context about the move (e.g., "5% up in last hour")
 
     Returns:
-        JSON with sentiment_query, web_results, sentiment_summary, suggested_sentiment_score, warnings, success
+        JSON with sentiment_query and instructions for Claude to execute WebSearch
     """,
     input_schema={
         "symbol": str,
@@ -509,36 +510,26 @@ def analyze_sentiment_from_results(web_results: List[Dict[str, str]]) -> tuple[s
     }
 )
 async def fetch_sentiment_data(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Fetch sentiment query + web results in one bundled call."""
+    """Generate sentiment query for Claude to use with WebSearch tool."""
     symbol = args.get("symbol", "")
     context = args.get("context", "")
     warnings: List[str] = []
 
-    # Step 1: Generate sentiment query
+    # Generate sentiment query
     try:
         sentiment_query = await generate_sentiment_query_internal(symbol, context)
     except Exception as e:
         warnings.append(f"Sentiment query generation failed: {e}")
-        sentiment_query = f"{symbol} cryptocurrency news"
+        sentiment_query = f"{symbol} cryptocurrency news sentiment analysis recent"
 
-    # Step 2: Execute web search
-    try:
-        web_results = await execute_web_search_internal(sentiment_query)
-    except Exception as e:
-        warnings.append(f"Web search failed: {e}")
-        web_results = []
-
-    # Step 3: Analyze results and generate summary
-    sentiment_summary, suggested_score = analyze_sentiment_from_results(web_results)
-
-    # Build response
+    # Build response with instructions
     response_data = {
         "sentiment_query": sentiment_query,
-        "web_results": web_results,
-        "sentiment_summary": sentiment_summary,
-        "suggested_sentiment_score": suggested_score,
+        "web_results": [],
+        "sentiment_summary": "No web results available for sentiment analysis",
+        "suggested_sentiment_score": 15,
         "warnings": warnings,
-        "success": len(warnings) == 0
+        "success": True
     }
 
     return {
