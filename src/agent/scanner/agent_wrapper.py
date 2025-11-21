@@ -24,7 +24,8 @@ class AgentWrapper:
         agent_options: ClaudeAgentOptions,
         token_tracker: Optional[Any] = None,
         session_manager: Optional[Any] = None,
-        operation_type: str = "scanner"
+        operation_type: str = "scanner",
+        persistent_client: bool = False
     ):
         """
         Initialize wrapper.
@@ -34,11 +35,17 @@ class AgentWrapper:
             token_tracker: Optional TokenTracker instance for tracking usage
             session_manager: Optional SessionManager for session persistence
             operation_type: Type of operation for session isolation (default: scanner)
+            persistent_client: If True, reuse same Claude client across multiple run() calls
         """
         self.agent_options = agent_options
         self.token_tracker = token_tracker
         self.session_manager = session_manager
         self.operation_type = operation_type
+        self.persistent_client = persistent_client
+
+        # Store persistent client and session if enabled
+        self._client = None
+        self._session_id = None
 
     async def run(self, prompt: str, symbol: str = None) -> Dict[str, Any]:
         """
@@ -48,7 +55,7 @@ class AgentWrapper:
         1. Creates signal queue for communication
         2. Sets queue in context for submit_trading_signal tool
         3. Sends prompt to agent via ClaudeSDKClient
-        4. Waits for agent to call submit_trading_signal (max 45s)
+        4. Waits for agent to call submit_trading_signal (max 120s)
         5. Returns signal dict or confidence=0 on timeout/error
 
         Args:
@@ -69,93 +76,124 @@ class AgentWrapper:
         final_message = None
 
         try:
-            # Get existing session ID if session manager is available
-            session_id = None
-            if self.session_manager:
-                session_id = await self.session_manager.get_session_id(self.operation_type)
-                if session_id:
-                    logger.info(f"Resuming {self.operation_type} session: {session_id}")
+            # In persistent mode, reuse existing client and session
+            if self.persistent_client and self._client is not None:
+                client = self._client
+                session_id = self._session_id
+                logger.info(f"Reusing persistent client (session: {session_id})")
+            else:
+                # Get existing session ID if session manager is available
+                session_id = None
+                if self.session_manager:
+                    session_id = await self.session_manager.get_session_id(
+                        self.operation_type,
+                        daily=self.persistent_client  # Use daily sessions in persistent mode
+                    )
+                    if session_id:
+                        logger.info(f"Resuming {self.operation_type} session: {session_id}")
+                    else:
+                        logger.info(f"Starting new {self.operation_type} session")
+
+                # Create agent client with configured options
+                if self.persistent_client:
+                    # In persistent mode, store the client
+                    self._client = ClaudeSDKClient(options=self.agent_options)
+                    await self._client.__aenter__()
+                    client = self._client
                 else:
-                    logger.info(f"Starting new {self.operation_type} session")
+                    # In non-persistent mode, use context manager (will auto-close)
+                    client = ClaudeSDKClient(options=self.agent_options)
+                    await client.__aenter__()
 
-            # Create agent client with configured options
-            async with ClaudeSDKClient(options=self.agent_options) as client:
-                logger.info("Starting agent analysis")
+            logger.info("Starting agent analysis")
 
-                # Send analysis prompt (with session resumption if available)
-                query_options = {}
-                if session_id:
-                    query_options['resume'] = session_id
+            # Send analysis prompt (with session resumption if available)
+            query_options = {}
+            if session_id:
+                query_options['resume'] = session_id
 
-                await client.query(prompt, **query_options)
+            await client.query(prompt, **query_options)
 
-                # Process agent messages (log for debugging and capture final message)
-                message_task = asyncio.create_task(
-                    self._process_messages(client)
+            # Process agent messages (log for debugging and capture final message)
+            message_task = asyncio.create_task(
+                self._process_messages(client)
+            )
+
+            # Wait for signal with 120-second timeout
+            # (Increased from 45s to accommodate Claude's processing speed with bundled tools)
+            try:
+                signal = await asyncio.wait_for(
+                    signal_queue.get(),
+                    timeout=120.0
                 )
 
-                # Wait for signal with 120-second timeout
-                # (Increased from 45s to accommodate Claude's processing speed with bundled tools)
+                logger.info(
+                    f"Agent analysis complete: confidence={signal['confidence']}, "
+                    f"symbol={signal['symbol']}"
+                )
+
+                # Cancel message processing task
+                message_task.cancel()
                 try:
-                    signal = await asyncio.wait_for(
-                        signal_queue.get(),
-                        timeout=120.0
+                    await message_task
+                except asyncio.CancelledError:
+                    pass
+
+                # Record token usage if tracker is available
+                if self.token_tracker and hasattr(self, '_result_message'):
+                    duration = time.time() - start_time
+                    await self.token_tracker.record_usage(
+                        result=self._result_message,
+                        operation_type="mover_analysis",
+                        duration_seconds=duration,
+                        metadata={"symbol": symbol or signal.get('symbol', 'unknown')}
                     )
 
-                    logger.info(
-                        f"Agent analysis complete: confidence={signal['confidence']}, "
-                        f"symbol={signal['symbol']}"
+                # Save session ID if session manager is available
+                if self.session_manager and hasattr(client, 'session_id') and client.session_id:
+                    # In persistent mode, generate daily session ID
+                    if self.persistent_client and not session_id:
+                        session_id = self.session_manager.generate_daily_session_id(self.operation_type)
+                        logger.info(f"Generated daily session ID: {session_id}")
+
+                    # Store session ID for persistent mode
+                    if self.persistent_client:
+                        self._session_id = client.session_id
+
+                    await self.session_manager.save_session_id(
+                        self.operation_type,
+                        session_id or client.session_id,
+                        metadata=f'{{"symbol": "{symbol or signal.get("symbol", "unknown")}"}}'
                     )
 
-                    # Cancel message processing task
-                    message_task.cancel()
-                    try:
-                        await message_task
-                    except asyncio.CancelledError:
-                        pass
+                return signal
 
-                    # Record token usage if tracker is available
-                    if self.token_tracker and hasattr(self, '_result_message'):
-                        duration = time.time() - start_time
-                        await self.token_tracker.record_usage(
-                            result=self._result_message,
-                            operation_type="mover_analysis",
-                            duration_seconds=duration,
-                            metadata={"symbol": symbol or signal.get('symbol', 'unknown')}
-                        )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Agent analysis timeout after 120 seconds - "
+                    "agent did not call submit_trading_signal"
+                )
 
-                    # Save session ID if session manager is available and this was a new session
-                    if self.session_manager and hasattr(client, 'session_id') and client.session_id:
-                        await self.session_manager.save_session_id(
-                            self.operation_type,
-                            client.session_id,
-                            metadata=f'{{"symbol": "{symbol or signal.get("symbol", "unknown")}"}}'
-                        )
+                # Cancel message processing
+                message_task.cancel()
+                try:
+                    await message_task
+                except asyncio.CancelledError:
+                    pass
 
-                    return signal
-
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        "Agent analysis timeout after 120 seconds - "
-                        "agent did not call submit_trading_signal"
-                    )
-
-                    # Cancel message processing
-                    message_task.cancel()
-                    try:
-                        await message_task
-                    except asyncio.CancelledError:
-                        pass
-
-                    return self._timeout_response()
+                return self._timeout_response()
 
         except Exception as e:
             logger.error(f"Error in agent analysis: {e}", exc_info=True)
             return self._error_response(str(e))
 
         finally:
-            # Clear module-level queue
+            # Clean up queue
             clear_signal_queue()
+
+            # Only close client if NOT in persistent mode
+            if not self.persistent_client and 'client' in locals():
+                await client.__aexit__(None, None, None)
 
     async def _process_messages(self, client: ClaudeSDKClient):
         """
@@ -398,3 +436,11 @@ class AgentWrapper:
     def get_sentiment_findings(self) -> list:
         """Get collected sentiment findings for summary display."""
         return getattr(self, '_sentiment_findings', [])
+
+    async def cleanup(self):
+        """Clean up persistent client if exists."""
+        if self._client:
+            await self._client.__aexit__(None, None, None)
+            self._client = None
+            self._session_id = None
+            logger.info("Persistent client cleaned up")
