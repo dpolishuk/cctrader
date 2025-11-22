@@ -204,27 +204,340 @@ python scripts/init_token_tracking.py
 
 ## Architecture
 
+### System Overview
+
+```mermaid
+flowchart TB
+    subgraph CLI["CLI Layer"]
+        MC[main.py]
+        MC --> |monitor| MON[Continuous Monitor]
+        MC --> |analyze| ANA[Single Analysis]
+        MC --> |scan-movers| SCN[Market Scanner]
+        MC --> |paper_status| PPR[Paper Trading]
+    end
+
+    subgraph SCANNER["Scanner Components"]
+        SCN --> MMS[MarketMoversScanner]
+        MMS --> MSC[MomentumScanner]
+        MMS --> FSM[FuturesSymbolManager]
+        MMS --> AGW[AgentWrapper]
+        MMS --> RV[RiskValidator]
+    end
+
+    subgraph AGENT["Claude Agent Integration"]
+        AGW --> |persistent_client| SDK[ClaudeSDKClient]
+        SDK --> SM[SessionManager]
+        SM --> |daily sessions| SID[(Session Storage)]
+        SDK --> TOOLS[MCP Tools]
+    end
+
+    subgraph TOOLS_DETAIL["Agent Tools"]
+        TOOLS --> MD[Market Data]
+        TOOLS --> TA[Technical Analysis]
+        TOOLS --> SA[Sentiment Analysis]
+        TOOLS --> SIG[Signal Submission]
+    end
+
+    subgraph EXECUTION["Trade Execution"]
+        SIG --> |confidence ≥60| PPM[PaperPortfolioManager]
+        PPM --> EE[ExecutionEngine]
+        PPM --> RM[RiskManager]
+        EE --> |simulated fill| DB
+    end
+
+    subgraph EXTERNAL["External Services"]
+        EX[Bybit Exchange]
+        PPX[Perplexity MCP]
+    end
+
+    subgraph STORAGE["Database Layer"]
+        DB[(SQLite)]
+        DB --> |signals| SIG_T[movers_signals]
+        DB --> |positions| POS_T[paper_positions]
+        DB --> |metrics| MET_T[token_usage]
+    end
+
+    MD --> |CCXT| EX
+    SA --> |WebSearch| PPX
+
+    classDef cli fill:#e1f5fe
+    classDef scanner fill:#fff3e0
+    classDef agent fill:#f3e5f5
+    classDef exec fill:#e8f5e9
+    classDef external fill:#fce4ec
+    classDef storage fill:#fff8e1
+
+    class MC,MON,ANA,SCN,PPR cli
+    class MMS,MSC,FSM,AGW,RV scanner
+    class SDK,SM,SID,TOOLS agent
+    class PPM,EE,RM exec
+    class EX,PPX external
+    class DB,SIG_T,POS_T,MET_T storage
 ```
-Trading Agent (Claude SDK)
-├── Market Data (CCXT → Bybit)
-│   ├── fetch_market_data - OHLCV candlestick data
-│   └── get_current_price - Real-time ticker
-├── Technical Analysis (pandas-ta)
-│   ├── analyze_technicals - RSI, MACD, Bollinger Bands
-│   └── multi_timeframe_analysis - Cross-timeframe view
-├── Sentiment Analysis (Perplexity MCP)
-│   ├── analyze_market_sentiment - News & social media
-│   └── detect_market_events - Significant events
-├── Signal Generation
-│   └── generate_trading_signal - BUY/SELL/HOLD signals
-├── Portfolio Monitor
-│   ├── update_portfolio - Position management
-│   └── calculate_pnl - P&L tracking
-└── SQLite Database
-    ├── signals - Trading signals history
-    ├── technical_analysis - TA indicators
-    ├── sentiment_analysis - Sentiment data
-    └── portfolio_state - Position tracking
+
+### Scanner Data Flow
+
+```mermaid
+sequenceDiagram
+    participant CLI as CLI (scan-movers)
+    participant MMS as MarketMoversScanner
+    participant MSC as MomentumScanner
+    participant AGW as AgentWrapper
+    participant SDK as ClaudeSDKClient
+    participant TOOLS as Agent Tools
+    participant RV as RiskValidator
+    participant PPM as PaperPortfolio
+
+    CLI->>MMS: start(--daily)
+
+    loop Every scan_interval (300s)
+        MMS->>MSC: scan_all_symbols()
+        MSC-->>MMS: gainers[], losers[]
+        MMS->>MMS: pre_filter_movers(top 20)
+
+        loop For each mover
+            MMS->>AGW: run(prompt, symbol)
+
+            alt Daily Mode (persistent_client=true)
+                AGW->>SDK: Reuse existing client
+            else Normal Mode
+                AGW->>SDK: Create new client
+            end
+
+            SDK->>TOOLS: fetch_technical_snapshot()
+            TOOLS-->>SDK: 15m/1h/4h analysis
+            SDK->>TOOLS: fetch_sentiment_data()
+            TOOLS-->>SDK: Web search results
+            SDK->>TOOLS: submit_trading_signal()
+            TOOLS-->>AGW: Signal (confidence, prices, scores)
+
+            AGW-->>MMS: Signal dict
+
+            alt confidence >= 60
+                MMS->>RV: validate_signal()
+                RV-->>MMS: valid=true/false
+
+                alt valid=true
+                    MMS->>PPM: execute_signal()
+                    PPM-->>MMS: Trade executed
+                else valid=false
+                    MMS->>MMS: save_rejection()
+                end
+            end
+        end
+
+        MMS->>MMS: save_cycle_metrics()
+    end
+```
+
+### Session Management (Daily Mode)
+
+```mermaid
+stateDiagram-v2
+    [*] --> CheckSession: scanner --daily
+
+    CheckSession --> CreateDaily: No existing session
+    CheckSession --> ValidateDate: Session exists
+
+    ValidateDate --> ReuseSession: Same day (scanner-2025-11-21)
+    ValidateDate --> CreateDaily: Different day (expired)
+
+    CreateDaily --> PersistentClient: Generate daily ID
+    ReuseSession --> PersistentClient: Use stored client
+
+    PersistentClient --> Analysis1: Symbol 1
+    Analysis1 --> Analysis2: Symbol 2 (same session)
+    Analysis2 --> AnalysisN: Symbol N (same session)
+
+    AnalysisN --> SaveSession: End of cycle
+    SaveSession --> CheckSession: Next cycle
+
+    state PersistentClient {
+        [*] --> QueryClaude
+        QueryClaude --> ProcessTools
+        ProcessTools --> WaitSignal
+        WaitSignal --> ReturnResult
+    }
+```
+
+### Component Architecture
+
+```mermaid
+classDiagram
+    class MarketMoversScanner {
+        +exchange
+        +agent: AgentWrapper
+        +portfolio
+        +db
+        +daily_mode: bool
+        +start()
+        +stop()
+        +scan_cycle()
+        +pre_filter_movers()
+    }
+
+    class AgentWrapper {
+        +agent_options: ClaudeAgentOptions
+        +session_manager: SessionManager
+        +persistent_client: bool
+        -_client: ClaudeSDKClient
+        -_session_id: str
+        +run(prompt, symbol)
+        +cleanup()
+    }
+
+    class SessionManager {
+        +SCANNER: str
+        +ANALYSIS: str
+        +get_session_id(op_type, daily)
+        +save_session_id(op_type, id)
+        +generate_daily_session_id(op_type)
+        +clear_session(op_type)
+    }
+
+    class MomentumScanner {
+        +exchange
+        +threshold_pct: float
+        +scan_symbol(symbol)
+        +scan_all_symbols(symbols)
+    }
+
+    class RiskValidator {
+        +risk_config: RiskConfig
+        +portfolio
+        +validate_signal(signal)
+    }
+
+    class PaperPortfolioManager {
+        +db: PaperTradingDatabase
+        +execution_engine: ExecutionEngine
+        +risk_manager: RiskManager
+        +execute_signal(signal)
+        +get_portfolio_status()
+    }
+
+    class ExecutionEngine {
+        +mode: instant|realistic
+        +execute_trade(signal)
+    }
+
+    class RiskManager {
+        +max_position_size_pct: float
+        +max_total_exposure_pct: float
+        +validate_trade(trade)
+        +check_circuit_breaker()
+    }
+
+    MarketMoversScanner --> AgentWrapper
+    MarketMoversScanner --> MomentumScanner
+    MarketMoversScanner --> RiskValidator
+    MarketMoversScanner --> PaperPortfolioManager
+    AgentWrapper --> SessionManager
+    PaperPortfolioManager --> ExecutionEngine
+    PaperPortfolioManager --> RiskManager
+```
+
+### Database Schema
+
+```mermaid
+erDiagram
+    agent_sessions {
+        text operation_type PK
+        text session_id
+        text created_at
+        text last_used_at
+        text metadata
+    }
+
+    movers_signals {
+        int id PK
+        text timestamp
+        text symbol
+        text direction
+        int confidence
+        float entry_price
+        float stop_loss
+        float take_profit
+        text analysis
+    }
+
+    paper_positions {
+        int id PK
+        text portfolio_name FK
+        text symbol
+        text direction
+        float entry_price
+        float quantity
+        float stop_loss
+        float take_profit
+        text status
+    }
+
+    paper_trades {
+        int id PK
+        text portfolio_name FK
+        text symbol
+        text trade_type
+        float price
+        float quantity
+        float pnl
+        text timestamp
+    }
+
+    token_usage {
+        int id PK
+        text session_id
+        int tokens_input
+        int tokens_output
+        float cost_usd
+        text operation_type
+        text timestamp
+    }
+
+    paper_portfolios ||--o{ paper_positions : contains
+    paper_portfolios ||--o{ paper_trades : records
+```
+
+### Tool Architecture
+
+```mermaid
+flowchart LR
+    subgraph BUNDLED["Scanner Bundled Tools"]
+        FTS[fetch_technical_snapshot]
+        FSD[fetch_sentiment_data]
+        STS[submit_trading_signal]
+    end
+
+    subgraph TECHNICAL["Technical Analysis"]
+        AT[analyze_trend]
+        AM[analyze_momentum]
+        AV[analyze_volatility]
+        AP[analyze_patterns]
+    end
+
+    subgraph MARKET["Market Data"]
+        FMD[fetch_market_data]
+        GCP[get_current_price]
+    end
+
+    subgraph EXTERNAL["External APIs"]
+        BYBIT[(Bybit/CCXT)]
+        WEB[(WebSearch/Perplexity)]
+    end
+
+    FTS --> FMD
+    FTS --> AT
+    FTS --> AM
+    FTS --> AV
+    FTS --> AP
+
+    FSD --> WEB
+
+    FMD --> BYBIT
+    GCP --> BYBIT
+
+    STS --> |confidence ≥60| SIGNAL[Trading Signal]
+    STS --> |confidence <60| REJECT[Rejected]
 ```
 
 ## Agent Workflow
