@@ -10,6 +10,8 @@ from .stage_panels import (
     render_running_panel,
     render_pending_panel
 )
+from .sidebar import SidebarRenderer, render_portfolio_panel, render_agent_stats_panel
+from .history_feed import HistoryFeed, PipelineHistoryEntry, render_history_feed
 
 __all__ = [
     "COLORS",
@@ -27,4 +29,7 @@ __all__ = [
     "render_execution_panel",
     "render_running_panel",
     "render_pending_panel",
+    "SidebarRenderer",
+    "render_portfolio_panel",
+    "render_agent_stats_panel",
 ]
