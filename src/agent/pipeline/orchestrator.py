@@ -1,10 +1,12 @@
 """Pipeline orchestrator for multi-agent trading system."""
 import logging
+import time
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 
 from src.agent.agents.base_agent import BaseAgent
 from src.agent.database.agent_operations import AgentOperations
+from src.agent.pipeline.dashboard.events import StageEvent, StageStatus
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,8 @@ class PipelineOrchestrator:
         risk_auditor: BaseAgent,
         execution_agent: BaseAgent,
         pnl_auditor: BaseAgent,
-        db_ops: AgentOperations
+        db_ops: AgentOperations,
+        event_callback: Optional[Callable[[StageEvent], None]] = None
     ):
         """
         Initialize pipeline orchestrator.
@@ -41,12 +44,37 @@ class PipelineOrchestrator:
             execution_agent: Execution Agent instance
             pnl_auditor: P&L Auditor Agent instance
             db_ops: Database operations for audit trail
+            event_callback: Optional callback for stage events
         """
         self.analysis_agent = analysis_agent
         self.risk_auditor = risk_auditor
         self.execution_agent = execution_agent
         self.pnl_auditor = pnl_auditor
         self.db_ops = db_ops
+        self.event_callback = event_callback
+
+    def _emit_event(
+        self,
+        stage: str,
+        status: StageStatus,
+        symbol: str,
+        elapsed_ms: int = 0,
+        output: Optional[Dict[str, Any]] = None,
+        message: Optional[str] = None,
+        error: Optional[str] = None
+    ) -> None:
+        """Emit event to callback if registered."""
+        if self.event_callback:
+            event = StageEvent(
+                stage=stage,
+                status=status,
+                symbol=symbol,
+                elapsed_ms=elapsed_ms,
+                output=output,
+                message=message,
+                error=error
+            )
+            self.event_callback(event)
 
     async def run_pipeline(
         self,
@@ -75,6 +103,8 @@ class PipelineOrchestrator:
 
         # Stage 1: Analysis
         logger.info("Stage 1: Running Analysis Agent")
+        start_time = time.time()
+        self._emit_event("analysis", StageStatus.RUNNING, symbol)
         try:
             analysis_output = await self.analysis_agent.run_with_tracking(
                 session_id=session_id,
@@ -87,8 +117,12 @@ class PipelineOrchestrator:
                     "volume_24h": volume_24h
                 }
             )
+            elapsed = int((time.time() - start_time) * 1000)
+            self._emit_event("analysis", StageStatus.COMPLETE, symbol, elapsed, analysis_output)
         except Exception as e:
             logger.error(f"Analysis Agent failed: {e}")
+            elapsed = int((time.time() - start_time) * 1000)
+            self._emit_event("analysis", StageStatus.ERROR, symbol, elapsed, error=str(e))
             return PipelineResult(
                 status="ERROR",
                 stage="analysis",
@@ -107,6 +141,8 @@ class PipelineOrchestrator:
 
         # Stage 2: Risk Audit
         logger.info("Stage 2: Running Risk Auditor Agent")
+        start_time = time.time()
+        self._emit_event("risk_auditor", StageStatus.RUNNING, symbol)
         try:
             risk_output = await self.risk_auditor.run_with_tracking(
                 session_id=session_id,
@@ -116,8 +152,12 @@ class PipelineOrchestrator:
                     "portfolio_state": portfolio_state or {}
                 }
             )
+            elapsed = int((time.time() - start_time) * 1000)
+            self._emit_event("risk_auditor", StageStatus.COMPLETE, symbol, elapsed, risk_output)
         except Exception as e:
             logger.error(f"Risk Auditor failed: {e}")
+            elapsed = int((time.time() - start_time) * 1000)
+            self._emit_event("risk_auditor", StageStatus.ERROR, symbol, elapsed, error=str(e))
             return PipelineResult(
                 status="ERROR",
                 stage="risk_auditor",
@@ -152,6 +192,8 @@ class PipelineOrchestrator:
             )
 
         logger.info("Stage 3: Running Execution Agent")
+        start_time = time.time()
+        self._emit_event("execution", StageStatus.RUNNING, symbol)
         try:
             execution_output = await self.execution_agent.run_with_tracking(
                 session_id=session_id,
@@ -162,8 +204,12 @@ class PipelineOrchestrator:
                     "portfolio_equity": portfolio_state.get("equity", 10000) if portfolio_state else 10000
                 }
             )
+            elapsed = int((time.time() - start_time) * 1000)
+            self._emit_event("execution", StageStatus.COMPLETE, symbol, elapsed, execution_output)
         except Exception as e:
             logger.error(f"Execution Agent failed: {e}")
+            elapsed = int((time.time() - start_time) * 1000)
+            self._emit_event("execution", StageStatus.ERROR, symbol, elapsed, error=str(e))
             return PipelineResult(
                 status="ERROR",
                 stage="execution",
