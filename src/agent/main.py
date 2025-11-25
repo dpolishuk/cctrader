@@ -819,5 +819,248 @@ def token_intervals(session_id, limit):
     asyncio.run(run())
 
 
+@cli.command()
+@click.option('--symbol', default='BTCUSDT', help='Symbol to display in demo')
+@click.option('--once', is_flag=True, help='Run once without live updates')
+def pipeline_demo(symbol, once):
+    """Demo the multi-agent pipeline dashboard visualization."""
+    import asyncio
+    import time
+    from rich.console import Console
+    from src.agent.pipeline.dashboard import (
+        PipelineDashboard,
+        DashboardConfig,
+        StageStatus
+    )
+    from src.agent.pipeline.dashboard.events import StageEvent
+
+    console = Console()
+
+    async def run_demo():
+        # Create dashboard
+        config = DashboardConfig(
+            show_sidebar=True,
+            show_history=True,
+            max_history=5
+        )
+        dashboard = PipelineDashboard(config=config)
+
+        # Set up portfolio state
+        dashboard.update_portfolio({
+            "equity": 10450.0,
+            "open_positions": 3,
+            "current_exposure_pct": 12.0,
+            "daily_pnl_pct": 1.2,
+            "weekly_pnl_pct": 3.8
+        })
+
+        dashboard.update_stats({
+            "analyzed": 12,
+            "approved": 8,
+            "rejected": 2,
+            "modified": 2,
+            "executed": 6,
+            "aborted": 2,
+            "win_rate": 66.7
+        })
+
+        if once:
+            # Static demo - show completed pipeline
+            dashboard.start_pipeline(symbol=symbol, session_id="demo-session")
+
+            # Simulate completed analysis
+            dashboard.handle_event(StageEvent(
+                stage="analysis",
+                status=StageStatus.COMPLETE,
+                symbol=symbol,
+                elapsed_ms=2300,
+                output={
+                    "analysis_report": {
+                        "symbol": symbol,
+                        "technical": {"trend_score": 0.85},
+                        "sentiment": {"score": 22},
+                        "liquidity": {"assessment": "good"},
+                        "btc_correlation": 0.3
+                    },
+                    "proposed_signal": {
+                        "direction": "LONG",
+                        "confidence": 72,
+                        "entry_price": 67500.0,
+                        "stop_loss": 64125.0,
+                        "take_profit": 72900.0,
+                        "position_size_pct": 3.0,
+                        "reasoning": "Strong uptrend on 4h timeframe"
+                    }
+                }
+            ))
+
+            # Simulate risk audit
+            dashboard.handle_event(StageEvent(
+                stage="risk_auditor",
+                status=StageStatus.COMPLETE,
+                symbol=symbol,
+                elapsed_ms=1800,
+                output={
+                    "risk_decision": {
+                        "action": "MODIFY",
+                        "original_confidence": 72,
+                        "audited_confidence": 68,
+                        "modifications": ["Reduced position size from 3% to 2.5%"],
+                        "warnings": ["High BTC correlation"],
+                        "risk_score": 35
+                    },
+                    "audited_signal": {
+                        "direction": "LONG",
+                        "confidence": 68,
+                        "entry_price": 67500.0,
+                        "stop_loss": 64125.0,
+                        "take_profit": 72900.0,
+                        "position_size_pct": 2.5,
+                        "reasoning": "Adjusted for risk limits"
+                    },
+                    "portfolio_snapshot": {
+                        "equity": 10450.0,
+                        "open_positions": 3,
+                        "current_exposure_pct": 12.0,
+                        "daily_pnl_pct": 1.2,
+                        "weekly_pnl_pct": 3.8
+                    }
+                }
+            ))
+
+            # Simulate execution
+            dashboard.handle_event(StageEvent(
+                stage="execution",
+                status=StageStatus.COMPLETE,
+                symbol=symbol,
+                elapsed_ms=900,
+                output={
+                    "execution_report": {
+                        "status": "FILLED",
+                        "order_type": "LIMIT",
+                        "requested_entry": 67500.0,
+                        "actual_entry": 67489.5,
+                        "slippage_pct": -0.016,
+                        "position_size": 0.0037,
+                        "position_value_usd": 249.91,
+                        "execution_time_ms": 850
+                    },
+                    "position_opened": {
+                        "symbol": symbol,
+                        "direction": "LONG",
+                        "entry_price": 67489.5,
+                        "stop_loss": 64125.0,
+                        "take_profit": 72900.0,
+                        "size": 0.0037,
+                        "opened_at": "2025-01-25T14:35:22Z"
+                    }
+                }
+            ))
+
+            dashboard.finalize_pipeline("EXECUTED", "+0.8%")
+
+            # Add some history entries
+            from datetime import datetime
+            from src.agent.pipeline.dashboard.history_feed import PipelineHistoryEntry
+
+            dashboard.history.add(PipelineHistoryEntry(
+                symbol="ETHUSDT",
+                outcome="NO_TRADE",
+                timestamp=datetime.now(),
+                detail="low confidence"
+            ))
+            dashboard.history.add(PipelineHistoryEntry(
+                symbol="SOLUSDT",
+                outcome="REJECTED",
+                timestamp=datetime.now(),
+                detail="daily loss limit"
+            ))
+
+            # Render once
+            dashboard.render_once()
+
+        else:
+            # Live demo with animation
+            console.print("[bold cyan]Starting live pipeline demo...[/bold cyan]")
+            console.print("Press Ctrl+C to exit\n")
+
+            async with dashboard.live_display():
+                while True:
+                    # Simulate a pipeline run
+                    dashboard.start_pipeline(symbol=symbol, session_id=f"demo-{int(time.time())}")
+
+                    # Analysis stage
+                    dashboard.handle_event(StageEvent(
+                        stage="analysis", status=StageStatus.RUNNING, symbol=symbol, elapsed_ms=0
+                    ))
+                    await asyncio.sleep(2)
+
+                    dashboard.handle_event(StageEvent(
+                        stage="analysis",
+                        status=StageStatus.COMPLETE,
+                        symbol=symbol,
+                        elapsed_ms=2000,
+                        output={
+                            "analysis_report": {"symbol": symbol, "technical": {}, "sentiment": {}, "liquidity": {}, "btc_correlation": 0.5},
+                            "proposed_signal": {
+                                "direction": "LONG",
+                                "confidence": 72,
+                                "entry_price": 67500.0,
+                                "stop_loss": 64125.0,
+                                "take_profit": 72900.0,
+                                "position_size_pct": 3.0,
+                                "reasoning": "Strong trend"
+                            }
+                        }
+                    ))
+                    await asyncio.sleep(1)
+
+                    # Risk stage
+                    dashboard.handle_event(StageEvent(
+                        stage="risk_auditor", status=StageStatus.RUNNING, symbol=symbol, elapsed_ms=0
+                    ))
+                    await asyncio.sleep(1.5)
+
+                    dashboard.handle_event(StageEvent(
+                        stage="risk_auditor",
+                        status=StageStatus.COMPLETE,
+                        symbol=symbol,
+                        elapsed_ms=1500,
+                        output={
+                            "risk_decision": {"action": "APPROVE", "original_confidence": 72, "audited_confidence": 72, "modifications": [], "warnings": [], "risk_score": 25},
+                            "audited_signal": {"direction": "LONG", "confidence": 72, "entry_price": 67500.0, "stop_loss": 64125.0, "take_profit": 72900.0, "position_size_pct": 3.0, "reasoning": "Approved"},
+                            "portfolio_snapshot": {"equity": 10450, "open_positions": 3, "current_exposure_pct": 12, "daily_pnl_pct": 1.2, "weekly_pnl_pct": 3.8}
+                        }
+                    ))
+                    await asyncio.sleep(1)
+
+                    # Execution stage
+                    dashboard.handle_event(StageEvent(
+                        stage="execution", status=StageStatus.RUNNING, symbol=symbol, elapsed_ms=0
+                    ))
+                    await asyncio.sleep(1)
+
+                    dashboard.handle_event(StageEvent(
+                        stage="execution",
+                        status=StageStatus.COMPLETE,
+                        symbol=symbol,
+                        elapsed_ms=900,
+                        output={
+                            "execution_report": {"status": "FILLED", "order_type": "LIMIT", "requested_entry": 67500.0, "actual_entry": 67489.5, "slippage_pct": -0.02, "position_size": 0.004, "position_value_usd": 270, "execution_time_ms": 800},
+                            "position_opened": {"symbol": symbol, "direction": "LONG", "entry_price": 67489.5, "stop_loss": 64125.0, "take_profit": 72900.0, "size": 0.004, "opened_at": "2025-01-25T14:35:22Z"}
+                        }
+                    ))
+
+                    dashboard.finalize_pipeline("EXECUTED", "+0.5%")
+
+                    # Wait before next cycle
+                    await asyncio.sleep(5)
+
+    try:
+        asyncio.run(run_demo())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Demo stopped[/yellow]")
+
+
 if __name__ == '__main__':
     cli()
