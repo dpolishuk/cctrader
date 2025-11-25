@@ -28,6 +28,7 @@ COLORS: Dict[str, str] = {
     "label": "dim cyan",
     "value": "white",
     "muted": "dim white",
+    "neutral": "dim white",
 }
 
 # Icons
@@ -39,6 +40,7 @@ ICONS: Dict[str, str] = {
     "pending": "○",
     "warning": "⚠",
     "error": "✗",
+    "skipped": "○",
     "arrow_down": "▼",
     "arrow_right": "→",
     "bullet": "•",

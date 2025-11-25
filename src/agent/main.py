@@ -308,7 +308,8 @@ def reset_breaker(portfolio):
 @click.option('--interval', default=300, help='Scan interval in seconds')
 @click.option('--portfolio', default='Market Movers', help='Paper trading portfolio name')
 @click.option('--daily', is_flag=True, help='Maintain single session per day (all analyses in one conversation)')
-def scan_movers(interval, portfolio, daily):
+@click.option('--dashboard', is_flag=True, help='Enable visual dashboard for cycle monitoring')
+def scan_movers(interval, portfolio, daily, dashboard):
     """Run market movers scanner - detects and analyzes 5%+ movers."""
     async def run_scanner():
         from src.agent.tools.market_data import get_exchange
@@ -531,13 +532,33 @@ Speed target: Complete analysis in under 30 seconds.""",
             persistent_client=daily  # Enable persistent client in daily mode
         )
 
+        # Initialize dashboard if enabled
+        scanner_dashboard = None
+        event_callback = None
+        if dashboard:
+            from src.agent.scanner.dashboard import ScannerDashboard, ScannerEvent
+            scanner_dashboard = ScannerDashboard()
+            scanner_dashboard.session_id = session_manager.get_session_id(SessionManager.SCANNER)
+
+            def event_callback(event_type: str, data: dict):
+                """Handle scanner events for dashboard."""
+                scanner_dashboard.handle_event(event_type, **data)
+
+                # Update portfolio info periodically
+                if event_type == ScannerEvent.CYCLE_START:
+                    # This will be updated from portfolio manager
+                    pass
+
+            console.print("[green]✓[/green] Dashboard mode enabled")
+
         # Create and start scanner
         scanner = MarketMoversScanner(
             exchange=exchange,
             agent=agent,
             portfolio=manager,
             db=db,
-            daily_mode=daily  # Pass daily mode flag
+            daily_mode=daily,  # Pass daily mode flag
+            event_callback=event_callback,  # Pass dashboard callback
         )
 
         # Inject scanner config into tools module for web search URL/timeout
@@ -554,7 +575,40 @@ Speed target: Complete analysis in under 30 seconds.""",
         console.print("[bold cyan]Scanner initialized. Press Ctrl+C to stop.[/bold cyan]")
 
         try:
-            await scanner.start()
+            if scanner_dashboard:
+                # Run with live dashboard display
+                async with await scanner_dashboard.live_display():
+                    # Update portfolio periodically
+                    async def update_portfolio_display():
+                        """Update portfolio display in dashboard."""
+                        while scanner.running:
+                            try:
+                                summary = await manager.get_portfolio_summary()
+                                portfolio_info = summary.get("portfolio", {})
+                                scanner_dashboard.update_portfolio({
+                                    "equity": portfolio_info.get("current_equity", 0),
+                                    "positions": summary.get("positions", {}).get("count", 0),
+                                    "exposure_pct": summary.get("positions", {}).get("exposure_pct", 0),
+                                    "pnl_pct": portfolio_info.get("total_pnl_pct", 0),
+                                })
+                            except Exception as e:
+                                logger.warning(f"Portfolio display update error: {e}")
+                            await asyncio.sleep(5)
+
+                    # Run portfolio updater in background
+                    portfolio_task = asyncio.create_task(update_portfolio_display())
+
+                    try:
+                        await scanner.start()
+                    finally:
+                        portfolio_task.cancel()
+                        try:
+                            await portfolio_task
+                        except asyncio.CancelledError:
+                            pass
+            else:
+                # Run without dashboard
+                await scanner.start()
         except KeyboardInterrupt:
             await scanner.stop()
             console.print("\n[yellow]Scanner stopped by user[/yellow]")
@@ -1055,6 +1109,168 @@ def pipeline_demo(symbol, once):
 
                     # Wait before next cycle
                     await asyncio.sleep(5)
+
+    try:
+        asyncio.run(run_demo())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Demo stopped[/yellow]")
+
+
+@cli.command()
+@click.option('--once', is_flag=True, help='Run once without live updates')
+def scanner_demo(once):
+    """Demo the scanner dashboard visualization."""
+    import asyncio
+    import time
+    import logging
+    from rich.console import Console
+    from src.agent.scanner.dashboard import ScannerDashboard, ScannerEvent
+
+    console = Console()
+
+    async def run_demo():
+        # Create dashboard with log capture
+        dashboard = ScannerDashboard(enable_log_capture=True)
+        dashboard.session_id = "demo-session"
+
+        # Set up portfolio state
+        dashboard.update_portfolio({
+            "equity": 10450.0,
+            "positions": 3,
+            "exposure_pct": 12.0,
+            "pnl_pct": 1.2,
+        })
+
+        dashboard.update_stats({
+            "total_signals": 5,
+            "total_executed": 3,
+            "win_rate": 66.7,
+        })
+
+        # Demo movers data
+        demo_movers = [
+            {"symbol": "BTCUSDT", "change_pct": 7.2, "direction": "gainer"},
+            {"symbol": "ETHUSDT", "change_pct": 5.8, "direction": "gainer"},
+            {"symbol": "SOLUSDT", "change_pct": -6.1, "direction": "loser"},
+            {"symbol": "AVAXUSDT", "change_pct": 5.2, "direction": "gainer"},
+            {"symbol": "LINKUSDT", "change_pct": -5.5, "direction": "loser"},
+        ]
+
+        if once:
+            # Static demo - show completed cycle
+            dashboard.handle_event(ScannerEvent.CYCLE_START, cycle_number=5, movers=demo_movers)
+
+            # Mark first few as complete
+            dashboard.complete_mover("BTCUSDT", "NO_TRADE", confidence=45)
+            dashboard.complete_mover("ETHUSDT", "EXECUTED", confidence=72, entry_price=3450.0)
+            dashboard.update_mover("SOLUSDT", status="analyzing", stage="analysis", stage_detail="sentiment")
+
+            # Add some mock log lines
+            if dashboard.split_screen:
+                dashboard.split_screen.log_buffer.add("14:35:22 INFO SCAN CYCLE #5 - Analyzing 5 movers")
+                dashboard.split_screen.log_buffer.add("14:35:23 INFO BTCUSDT: Technical score 28/40, weak setup")
+                dashboard.split_screen.log_buffer.add("14:35:24 INFO BTCUSDT: Confidence 45/100 (below threshold)")
+                dashboard.split_screen.log_buffer.add("14:35:25 INFO ETHUSDT: Technical score 35/40, strong setup")
+                dashboard.split_screen.log_buffer.add("14:35:26 INFO ETHUSDT: Signal generated - Confidence 72/100")
+                dashboard.split_screen.log_buffer.add("14:35:27 INFO ETHUSDT: Risk check PASSED")
+                dashboard.split_screen.log_buffer.add("14:35:28 INFO ETHUSDT: EXECUTED @ $3,450.00")
+
+            # Render once
+            dashboard.render_once()
+
+        else:
+            # Live demo with animation
+            console.print("[bold cyan]Starting live scanner dashboard demo...[/bold cyan]")
+            console.print("Press Ctrl+C to exit\n")
+
+            # Set up logging to capture
+            demo_logger = logging.getLogger("scanner_demo")
+            demo_logger.setLevel(logging.INFO)
+
+            async with await dashboard.live_display():
+                # Add demo logger to capture
+                if dashboard.split_screen:
+                    demo_logger.addHandler(dashboard.split_screen.get_log_handler())
+
+                cycle = 0
+                while True:
+                    cycle += 1
+
+                    # Start new cycle
+                    dashboard.handle_event(ScannerEvent.CYCLE_START, cycle_number=cycle, movers=demo_movers)
+                    demo_logger.info(f"SCAN CYCLE #{cycle} - Analyzing {len(demo_movers)} movers")
+                    await asyncio.sleep(1)
+
+                    # Process each mover
+                    for i, mover in enumerate(demo_movers):
+                        symbol = mover["symbol"]
+                        dashboard.handle_event(ScannerEvent.MOVER_START, symbol=symbol)
+                        demo_logger.info(f"{symbol}: Starting analysis")
+                        await asyncio.sleep(0.5)
+
+                        dashboard.handle_event(ScannerEvent.ANALYSIS_PHASE, symbol=symbol, phase="technical")
+                        demo_logger.info(f"{symbol}: Technical analysis")
+                        await asyncio.sleep(0.5)
+
+                        dashboard.handle_event(ScannerEvent.ANALYSIS_PHASE, symbol=symbol, phase="sentiment")
+                        demo_logger.info(f"{symbol}: Sentiment analysis")
+                        await asyncio.sleep(0.5)
+
+                        # Random outcome
+                        import random
+                        confidence = random.randint(35, 85)
+                        if confidence >= 60:
+                            dashboard.handle_event(
+                                ScannerEvent.SIGNAL_GENERATED,
+                                symbol=symbol,
+                                confidence=confidence,
+                                entry_price=random.uniform(1000, 70000),
+                            )
+                            demo_logger.info(f"{symbol}: Signal generated - Confidence {confidence}/100")
+
+                            dashboard.handle_event(ScannerEvent.RISK_CHECK, symbol=symbol)
+                            await asyncio.sleep(0.3)
+
+                            if random.random() > 0.3:
+                                dashboard.handle_event(ScannerEvent.EXECUTION, symbol=symbol)
+                                dashboard.handle_event(
+                                    ScannerEvent.MOVER_COMPLETE,
+                                    symbol=symbol,
+                                    result="EXECUTED",
+                                    confidence=confidence,
+                                    entry_price=random.uniform(1000, 70000),
+                                )
+                                demo_logger.info(f"{symbol}: EXECUTED")
+                            else:
+                                dashboard.handle_event(
+                                    ScannerEvent.MOVER_COMPLETE,
+                                    symbol=symbol,
+                                    result="REJECTED",
+                                    confidence=confidence,
+                                )
+                                demo_logger.info(f"{symbol}: REJECTED (risk limit)")
+                        else:
+                            dashboard.handle_event(
+                                ScannerEvent.MOVER_COMPLETE,
+                                symbol=symbol,
+                                result="NO_TRADE",
+                                confidence=confidence,
+                            )
+                            demo_logger.info(f"{symbol}: NO_TRADE (confidence {confidence})")
+
+                        await asyncio.sleep(0.3)
+
+                    # Complete cycle
+                    dashboard.handle_event(
+                        ScannerEvent.CYCLE_COMPLETE,
+                        signals_generated=random.randint(1, 3),
+                        trades_executed=random.randint(0, 2),
+                        trades_rejected=random.randint(0, 1),
+                    )
+                    demo_logger.info(f"Cycle #{cycle} completed")
+
+                    # Wait before next cycle
+                    await asyncio.sleep(3)
 
     try:
         asyncio.run(run_demo())

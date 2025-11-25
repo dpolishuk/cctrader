@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Callable
 
 from rich.console import Console
 from rich.table import Table
@@ -15,9 +15,13 @@ from .momentum_scanner import MomentumScanner
 from .confidence import ConfidenceCalculator
 from .risk_validator import RiskValidator
 from .prompts import PromptBuilder
+from .dashboard import ScannerEvent
 
 logger = logging.getLogger(__name__)
 console = Console()
+
+# Type alias for event callback
+EventCallback = Callable[[str, Dict[str, Any]], None]
 
 class MarketMoversScanner:
     """Main market movers scanner orchestrator."""
@@ -30,7 +34,8 @@ class MarketMoversScanner:
         db,
         config: Optional[ScannerConfig] = None,
         risk_config: Optional[RiskConfig] = None,
-        daily_mode: bool = False
+        daily_mode: bool = False,
+        event_callback: Optional[EventCallback] = None
     ):
         """
         Initialize market movers scanner.
@@ -43,12 +48,14 @@ class MarketMoversScanner:
             config: Scanner configuration (optional)
             risk_config: Risk configuration (optional)
             daily_mode: If True, maintain single session per day (optional)
+            event_callback: Optional callback for dashboard events
         """
         self.exchange = exchange
         self.agent = agent
         self.portfolio = portfolio
         self.db = db
         self.daily_mode = daily_mode
+        self.event_callback = event_callback
 
         self.config = config or ScannerConfig()
         self.risk_config = risk_config or RiskConfig()
@@ -67,6 +74,21 @@ class MarketMoversScanner:
         self.prompt_builder = PromptBuilder()
 
         self.running = False
+        self.cycle_number = 0
+
+    def _emit_event(self, event_type: str, **kwargs) -> None:
+        """
+        Emit an event to the dashboard callback.
+
+        Args:
+            event_type: Type of event (from ScannerEvent).
+            **kwargs: Event-specific data.
+        """
+        if self.event_callback:
+            try:
+                self.event_callback(event_type, kwargs)
+            except Exception as e:
+                logger.warning(f"Event callback error: {e}")
 
     async def start(self):
         """Start the scanning loop."""
@@ -162,8 +184,9 @@ class MarketMoversScanner:
     async def scan_cycle(self):
         """Execute one complete scan cycle."""
         cycle_start = datetime.now()
+        self.cycle_number += 1
         logger.info(f"\n{'='*80}")
-        logger.info(f"🔍 SCAN CYCLE - {cycle_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"🔍 SCAN CYCLE #{self.cycle_number} - {cycle_start.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"{'='*80}")
 
         # Display portfolio status with P&L before scanning
@@ -188,35 +211,87 @@ class MarketMoversScanner:
         top_movers = await self.pre_filter_movers(movers)
         logger.info(f"🎯 Analyzing top {len(top_movers)} movers")
 
+        # Emit cycle start event with movers data
+        movers_data = [
+            {
+                "symbol": m["symbol"],
+                "change_pct": m.get("max_change", m.get("change_1h", 0)),
+                "direction": m.get("direction", "gainer"),
+            }
+            for m in top_movers
+        ]
+        self._emit_event(
+            ScannerEvent.CYCLE_START,
+            cycle_number=self.cycle_number,
+            movers=movers_data,
+        )
+
         # Step 3: Deep analysis with agent for each mover
         for mover in top_movers:
+            symbol = mover.get('symbol', 'UNKNOWN')
             try:
+                # Emit mover start event
+                self._emit_event(ScannerEvent.MOVER_START, symbol=symbol)
+
                 signal, sentiment_findings = await self._analyze_mover_with_agent(mover)
 
                 # Store sentiment findings for summary
                 if sentiment_findings:
-                    sentiment_summary[mover['symbol']] = sentiment_findings
+                    sentiment_summary[symbol] = sentiment_findings
 
                 if signal is None:
                     # Agent didn't generate a signal (low confidence or error)
+                    self._emit_event(
+                        ScannerEvent.MOVER_COMPLETE,
+                        symbol=symbol,
+                        result="NO_TRADE",
+                    )
                     continue
 
                 signals_generated += 1
 
+                # Emit signal generated event
+                self._emit_event(
+                    ScannerEvent.SIGNAL_GENERATED,
+                    symbol=symbol,
+                    confidence=signal.get('confidence'),
+                    entry_price=signal.get('entry_price'),
+                )
+
                 # Step 4: Risk validation
+                self._emit_event(ScannerEvent.RISK_CHECK, symbol=symbol)
                 validation = await self.risk_validator.validate_signal(signal)
 
                 if validation['valid']:
                     # Step 5: Execute trade
+                    self._emit_event(ScannerEvent.EXECUTION, symbol=symbol)
                     await self._execute_signal(signal)
                     trades_executed += 1
+                    self._emit_event(
+                        ScannerEvent.MOVER_COMPLETE,
+                        symbol=symbol,
+                        result="EXECUTED",
+                        confidence=signal.get('confidence'),
+                        entry_price=signal.get('entry_price'),
+                    )
                 else:
                     # Save rejection
                     await self._save_rejection(signal, validation['reason'])
                     trades_rejected += 1
+                    self._emit_event(
+                        ScannerEvent.MOVER_COMPLETE,
+                        symbol=symbol,
+                        result="REJECTED",
+                        confidence=signal.get('confidence'),
+                    )
 
             except Exception as e:
-                logger.error(f"❌ Error analyzing {mover.get('symbol')}: {e}", exc_info=True)
+                logger.error(f"❌ Error analyzing {symbol}: {e}", exc_info=True)
+                self._emit_event(
+                    ScannerEvent.MOVER_COMPLETE,
+                    symbol=symbol,
+                    result="ERROR",
+                )
 
         logger.info(f"⚡ Generated {signals_generated} signals (confidence ≥ 60)")
         logger.info(f"✅ Executed {trades_executed} trades, ❌ Rejected {trades_rejected}")
@@ -258,6 +333,16 @@ class MarketMoversScanner:
         logger.info(f"\n⏱️  Cycle completed in {cycle_duration:.1f}s")
         logger.info(f"{'='*80}\n")
 
+        # Emit cycle complete event
+        self._emit_event(
+            ScannerEvent.CYCLE_COMPLETE,
+            cycle_number=self.cycle_number,
+            signals_generated=signals_generated,
+            trades_executed=trades_executed,
+            trades_rejected=trades_rejected,
+            duration_seconds=cycle_duration,
+        )
+
     async def pre_filter_movers(self, movers: Dict[str, List]) -> List[Dict]:
         """
         Pre-filter movers by volume before deep analysis.
@@ -294,7 +379,11 @@ class MarketMoversScanner:
         Returns:
             Tuple of (Signal dict if confidence >= 60 else None, sentiment_findings list)
         """
-        logger.info(f"\n🤖 Analyzing {mover['symbol']} ({mover['direction']}) {mover['change_1h']:+.2f}% (1h)")
+        symbol = mover['symbol']
+        logger.info(f"\n🤖 Analyzing {symbol} ({mover['direction']}) {mover['change_1h']:+.2f}% (1h)")
+
+        # Emit analysis phase event
+        self._emit_event(ScannerEvent.ANALYSIS_PHASE, symbol=symbol, phase="technical")
 
         # Build portfolio context (await all async calls)
         total_value = self.portfolio.get_total_value()
@@ -319,8 +408,11 @@ class MarketMoversScanner:
         prompt = self.prompt_builder.build_analysis_prompt(mover, portfolio_context)
 
         try:
+            # Emit sentiment phase before agent (agent will do both technical and sentiment)
+            self._emit_event(ScannerEvent.ANALYSIS_PHASE, symbol=symbol, phase="sentiment")
+
             # Invoke agent
-            response = await self.agent.run(prompt, symbol=mover['symbol'])
+            response = await self.agent.run(prompt, symbol=symbol)
 
             # Get sentiment findings from agent
             sentiment_findings = self.agent.get_sentiment_findings() if hasattr(self.agent, 'get_sentiment_findings') else []

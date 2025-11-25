@@ -13,6 +13,7 @@ from .stage_panels import (
 from .sidebar import SidebarRenderer, render_portfolio_panel, render_agent_stats_panel
 from .history_feed import HistoryFeed, PipelineHistoryEntry, render_history_feed
 from .pipeline_dashboard import PipelineDashboard, DashboardConfig
+from .mover_row import MoverRowRenderer, MoverRowData, MoverRowStyle
 
 __all__ = [
     "COLORS",
@@ -38,4 +39,7 @@ __all__ = [
     "render_history_feed",
     "PipelineDashboard",
     "DashboardConfig",
+    "MoverRowRenderer",
+    "MoverRowData",
+    "MoverRowStyle",
 ]
