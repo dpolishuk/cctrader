@@ -32,4 +32,7 @@ __all__ = [
     "SidebarRenderer",
     "render_portfolio_panel",
     "render_agent_stats_panel",
+    "HistoryFeed",
+    "PipelineHistoryEntry",
+    "render_history_feed",
 ]
