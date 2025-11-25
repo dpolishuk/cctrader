@@ -2,6 +2,7 @@
 import sys
 import pytest
 import json
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, Mock
 
 # Mock anthropic module before importing tools
@@ -23,43 +24,34 @@ async def test_execute_web_search_success():
     """Test successful web search execution with valid results."""
     query = "Bitcoin crypto news"
 
-    # Mock aiohttp response
-    mock_response_data = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({
-                    "results": [
-                        {
-                            "title": "Bitcoin hits new high",
-                            "description": "BTC surges to $100k",
-                            "url": "https://example.com/btc-news"
-                        },
-                        {
-                            "title": "Crypto rally continues",
-                            "snippet": "Markets bullish",
-                            "url": "https://example.com/crypto"
-                        }
-                    ]
-                })
-            }]
+    # Mock DuckDuckGo search results
+    mock_ddg_results = [
+        {
+            "title": "Bitcoin hits new high",
+            "body": "BTC surges to $100k",
+            "href": "https://example.com/btc-news"
+        },
+        {
+            "title": "Crypto rally continues",
+            "body": "Markets bullish",
+            "href": "https://example.com/crypto"
         }
-    }
+    ]
 
-    # Create mock response object
-    mock_response = AsyncMock()
-    mock_response.status = 200
-    mock_response.json = AsyncMock(return_value=mock_response_data)
+    # Mock DDGS context manager
+    mock_ddgs = MagicMock()
+    mock_ddgs.__enter__ = MagicMock(return_value=mock_ddgs)
+    mock_ddgs.__exit__ = MagicMock(return_value=None)
+    mock_ddgs.text = MagicMock(return_value=mock_ddg_results)
 
-    # Create mock session
-    mock_session = MagicMock()
-    mock_session.post = MagicMock(return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_response), __aexit__=AsyncMock()))
-
-    # Patch ClientSession
-    with patch('aiohttp.ClientSession', return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_session), __aexit__=AsyncMock())):
+    # Patch where DDGS is imported (in tools module)
+    import src.agent.scanner.tools as tools_module
+    original_ddgs = tools_module.DDGS
+    tools_module.DDGS = lambda: mock_ddgs
+    try:
         results = await execute_web_search_internal(query)
+    finally:
+        tools_module.DDGS = original_ddgs
 
     # Verify results
     assert len(results) == 2
@@ -73,47 +65,31 @@ async def test_execute_web_search_success():
 @pytest.mark.asyncio
 async def test_execute_web_search_connection_error():
     """Test web search handles connection errors properly."""
-    import aiohttp
     query = "Bitcoin news"
 
-    # Create a mock that raises when used as async context manager
-    class MockErrorResponse:
-        async def __aenter__(self):
-            raise aiohttp.ClientError("Connection failed")
+    # Mock DDGS that raises exception
+    mock_ddgs = MagicMock()
+    mock_ddgs.__enter__ = MagicMock(return_value=mock_ddgs)
+    mock_ddgs.__exit__ = MagicMock(return_value=None)
+    mock_ddgs.text = MagicMock(side_effect=Exception("Connection failed"))
 
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
-            pass
-
-    mock_session = MagicMock()
-    mock_session.post = MagicMock(return_value=MockErrorResponse())
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=None)
-
-    with patch('aiohttp.ClientSession', return_value=mock_session):
-        with pytest.raises(RuntimeError, match="Web search connection error"):
+    import src.agent.scanner.tools as tools_module
+    original_ddgs = tools_module.DDGS
+    tools_module.DDGS = lambda: mock_ddgs
+    try:
+        with pytest.raises(RuntimeError, match="Web search failed"):
             await execute_web_search_internal(query)
+    finally:
+        tools_module.DDGS = original_ddgs
 
 
 @pytest.mark.asyncio
 async def test_execute_web_search_timeout():
     """Test web search handles timeout errors properly."""
-    import asyncio
     query = "Bitcoin news"
 
-    # Create a mock that raises timeout when used as async context manager
-    class MockTimeoutResponse:
-        async def __aenter__(self):
-            raise asyncio.TimeoutError()
-
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
-            pass
-
-    mock_session = MagicMock()
-    mock_session.post = MagicMock(return_value=MockTimeoutResponse())
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=None)
-
-    with patch('aiohttp.ClientSession', return_value=mock_session):
+    # Mock asyncio.wait_for to raise TimeoutError
+    with patch('src.agent.scanner.tools.asyncio.wait_for', side_effect=asyncio.TimeoutError()):
         with pytest.raises(RuntimeError, match="Web search timeout"):
             await execute_web_search_internal(query)
 
@@ -123,84 +99,20 @@ async def test_execute_web_search_empty_results():
     """Test web search raises error on empty results."""
     query = "Bitcoin news"
 
-    # Mock response with empty results
-    mock_response_data = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {
-            "content": [{
-                "type": "text",
-                "text": json.dumps({"results": []})
-            }]
-        }
-    }
+    # Mock DDGS that returns empty results
+    mock_ddgs = MagicMock()
+    mock_ddgs.__enter__ = MagicMock(return_value=mock_ddgs)
+    mock_ddgs.__exit__ = MagicMock(return_value=None)
+    mock_ddgs.text = MagicMock(return_value=[])
 
-    mock_response = MagicMock()
-    mock_response.status = 200
-    mock_response.json = AsyncMock(return_value=mock_response_data)
-    mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-    mock_response.__aexit__ = AsyncMock(return_value=None)
-
-    mock_session = MagicMock()
-    mock_session.post = MagicMock(return_value=mock_response)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=None)
-
-    with patch('aiohttp.ClientSession', return_value=mock_session):
+    import src.agent.scanner.tools as tools_module
+    original_ddgs = tools_module.DDGS
+    tools_module.DDGS = lambda: mock_ddgs
+    try:
         with pytest.raises(RuntimeError, match="Web search returned empty results"):
             await execute_web_search_internal(query)
-
-
-@pytest.mark.asyncio
-async def test_execute_web_search_http_error():
-    """Test web search handles HTTP error status codes."""
-    query = "Bitcoin news"
-
-    # Mock response with error status
-    mock_response = MagicMock()
-    mock_response.status = 500
-    mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-    mock_response.__aexit__ = AsyncMock(return_value=None)
-
-    mock_session = MagicMock()
-    mock_session.post = MagicMock(return_value=mock_response)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=None)
-
-    with patch('aiohttp.ClientSession', return_value=mock_session):
-        with pytest.raises(RuntimeError, match="Web search HTTP error: status=500"):
-            await execute_web_search_internal(query)
-
-
-@pytest.mark.asyncio
-async def test_execute_web_search_rpc_error():
-    """Test web search handles JSON-RPC errors."""
-    query = "Bitcoin news"
-
-    # Mock response with RPC error
-    mock_response_data = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "error": {
-            "code": -32600,
-            "message": "Invalid request"
-        }
-    }
-
-    mock_response = MagicMock()
-    mock_response.status = 200
-    mock_response.json = AsyncMock(return_value=mock_response_data)
-    mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-    mock_response.__aexit__ = AsyncMock(return_value=None)
-
-    mock_session = MagicMock()
-    mock_session.post = MagicMock(return_value=mock_response)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=None)
-
-    with patch('aiohttp.ClientSession', return_value=mock_session):
-        with pytest.raises(RuntimeError, match="Web search RPC error: Invalid request"):
-            await execute_web_search_internal(query)
+    finally:
+        tools_module.DDGS = original_ddgs
 
 
 @pytest.mark.asyncio

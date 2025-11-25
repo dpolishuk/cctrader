@@ -1,11 +1,12 @@
 """Scanner-specific tools for Claude Agent integration."""
 import anthropic
-import aiohttp
 import asyncio
+import concurrent.futures
 import json
 import logging
 from typing import Dict, Any, Optional, List
 from claude_agent_sdk import tool
+from duckduckgo_search import DDGS
 
 from .config import ScannerConfig
 
@@ -469,9 +470,9 @@ async def generate_sentiment_query_internal(symbol: str, context: str = "") -> s
 
 
 async def execute_web_search_internal(query: str) -> List[Dict[str, str]]:
-    """Internal function to execute web search via MCP.
+    """Execute web search using DuckDuckGo.
 
-    Calls the web-search MCP HTTP endpoint using aiohttp.
+    Uses the duckduckgo-search library for direct search results.
 
     Args:
         query: Search query string
@@ -480,77 +481,42 @@ async def execute_web_search_internal(query: str) -> List[Dict[str, str]]:
         List of search results with keys: title, snippet, url
 
     Raises:
-        RuntimeError: On connection error, timeout, or empty results
+        RuntimeError: On search error or empty results
     """
-    url = get_web_search_url()
     timeout_seconds = get_web_search_timeout()
 
-    # Build MCP request payload
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": "search",
-            "arguments": {
-                "query": query,
-                "engines": ["duckduckgo", "bing"],
-                "limit": 10
-            }
-        }
-    }
+    def _search_sync():
+        """Synchronous search function to run in executor."""
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=10))
+            return results
 
     try:
-        timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, json=payload) as response:
-                if response.status != 200:
-                    raise RuntimeError(f"Web search HTTP error: status={response.status}")
+        # Run sync search in thread executor with timeout
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = loop.run_in_executor(executor, _search_sync)
+            results = await asyncio.wait_for(future, timeout=timeout_seconds)
 
-                data = await response.json()
+        if not results:
+            raise RuntimeError("Web search returned empty results")
 
-                # Check for JSON-RPC error
-                if "error" in data:
-                    error_msg = data["error"].get("message", "Unknown error")
-                    raise RuntimeError(f"Web search RPC error: {error_msg}")
+        # Normalize result format: title, snippet, url
+        normalized_results = []
+        for item in results:
+            normalized_results.append({
+                "title": item.get("title", ""),
+                "snippet": item.get("body", ""),
+                "url": item.get("href", "")
+            })
 
-                # Extract results from response
-                if "result" not in data:
-                    raise RuntimeError("Web search response missing 'result' field")
+        return normalized_results
 
-                result = data["result"]
-
-                # Result contains content array with text field containing JSON
-                if "content" not in result or not result["content"]:
-                    raise RuntimeError("Web search response missing 'content' field")
-
-                content_text = result["content"][0].get("text", "{}")
-                results_data = json.loads(content_text)
-
-                # Extract results array
-                results = results_data.get("results", [])
-
-                if not results:
-                    raise RuntimeError("Web search returned empty results")
-
-                # Normalize result format: title, snippet, url
-                normalized_results = []
-                for item in results:
-                    normalized_results.append({
-                        "title": item.get("title", ""),
-                        "snippet": item.get("description", item.get("snippet", "")),
-                        "url": item.get("url", "")
-                    })
-
-                return normalized_results
-
-    except aiohttp.ClientError as e:
-        raise RuntimeError(f"Web search connection error: {e}")
     except asyncio.TimeoutError:
         raise RuntimeError(f"Web search timeout after {timeout_seconds}s")
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Web search JSON parse error: {e}")
     except Exception as e:
+        if "RuntimeError" in str(type(e)):
+            raise
         raise RuntimeError(f"Web search failed: {e}")
 
 
