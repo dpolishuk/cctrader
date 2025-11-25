@@ -4,6 +4,10 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+
 from .config import ScannerConfig
 from .risk_config import RiskConfig
 from .symbol_manager import FuturesSymbolManager
@@ -13,6 +17,7 @@ from .risk_validator import RiskValidator
 from .prompts import PromptBuilder
 
 logger = logging.getLogger(__name__)
+console = Console()
 
 class MarketMoversScanner:
     """Main market movers scanner orchestrator."""
@@ -92,12 +97,77 @@ class MarketMoversScanner:
         if self.daily_mode and hasattr(self.agent, 'cleanup'):
             await self.agent.cleanup()
 
+    async def display_portfolio_status(self):
+        """Display portfolio status with P&L and open positions."""
+        try:
+            summary = await self.portfolio.get_portfolio_summary()
+            portfolio = summary["portfolio"]
+            positions_data = summary["positions"]
+            risk = summary["risk"]
+
+            # Format P&L with color
+            pnl = portfolio["total_pnl"]
+            pnl_pct = portfolio["total_pnl_pct"]
+            pnl_color = "green" if pnl >= 0 else "red"
+            pnl_sign = "+" if pnl >= 0 else ""
+
+            # Build header line
+            header = (
+                f"[bold]💰 Portfolio:[/bold] "
+                f"[cyan]${portfolio['current_equity']:,.2f}[/cyan] "
+                f"[{pnl_color}]({pnl_sign}{pnl_pct:.2f}% P&L)[/{pnl_color}] | "
+                f"[yellow]{positions_data['count']} positions[/yellow] | "
+                f"[magenta]{positions_data['exposure_pct']:.1f}% exposure[/magenta]"
+            )
+
+            console.print(header)
+
+            # Show open positions if any
+            if positions_data["open_positions"]:
+                positions_line = "   "
+                for pos in positions_data["open_positions"]:
+                    symbol = pos["symbol"].replace("/", "").replace(":USDT", "")
+                    direction = "LONG" if pos["position_type"] == "long" else "SHORT"
+                    unrealized = pos.get("unrealized_pnl", 0)
+                    entry = pos.get("entry_price", 0)
+                    current = pos.get("current_price", entry)
+
+                    # Calculate P&L percentage
+                    if entry > 0:
+                        if direction == "LONG":
+                            pnl_pct_pos = ((current - entry) / entry) * 100
+                        else:
+                            pnl_pct_pos = ((entry - current) / entry) * 100
+                    else:
+                        pnl_pct_pos = 0
+
+                    pos_color = "green" if pnl_pct_pos >= 0 else "red"
+                    pos_sign = "+" if pnl_pct_pos >= 0 else ""
+
+                    positions_line += f"[{pos_color}]{symbol}: {direction} {pos_sign}{pnl_pct_pos:.1f}%[/{pos_color}] | "
+
+                # Remove trailing separator
+                positions_line = positions_line.rstrip(" | ")
+                console.print(positions_line)
+
+            # Show risk warning if needed
+            if risk["current_drawdown_pct"] > 5:
+                console.print(f"   [red]⚠️  Drawdown: {risk['current_drawdown_pct']:.1f}%[/red]")
+
+            console.print()  # Empty line after portfolio status
+
+        except Exception as e:
+            logger.warning(f"Could not display portfolio status: {e}")
+
     async def scan_cycle(self):
         """Execute one complete scan cycle."""
         cycle_start = datetime.now()
         logger.info(f"\n{'='*80}")
         logger.info(f"🔍 SCAN CYCLE - {cycle_start.strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info(f"{'='*80}\n")
+        logger.info(f"{'='*80}")
+
+        # Display portfolio status with P&L before scanning
+        await self.display_portfolio_status()
 
         # Metrics tracking
         signals_generated = 0
