@@ -12,6 +12,7 @@ from .stage_panels import (
 )
 from .sidebar import SidebarRenderer, render_portfolio_panel, render_agent_stats_panel
 from .history_feed import HistoryFeed, PipelineHistoryEntry, render_history_feed
+from .pipeline_dashboard import PipelineDashboard, DashboardConfig
 
 __all__ = [
     "COLORS",
@@ -35,4 +36,6 @@ __all__ = [
     "HistoryFeed",
     "PipelineHistoryEntry",
     "render_history_feed",
+    "PipelineDashboard",
+    "DashboardConfig",
 ]
