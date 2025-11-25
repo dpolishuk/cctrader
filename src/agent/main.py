@@ -540,6 +540,10 @@ Speed target: Complete analysis in under 30 seconds.""",
             daily_mode=daily  # Pass daily mode flag
         )
 
+        # Inject scanner config into tools module for web search URL/timeout
+        from src.agent.scanner.tools import set_scanner_config
+        set_scanner_config(scanner.config)
+
         scanner.config.scan_interval_seconds = interval
 
         # Log daily mode status

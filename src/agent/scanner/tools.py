@@ -1,9 +1,13 @@
 """Scanner-specific tools for Claude Agent integration."""
+import anthropic
+import aiohttp
 import asyncio
 import json
 import logging
 from typing import Dict, Any, Optional, List
 from claude_agent_sdk import tool
+
+from .config import ScannerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +25,30 @@ def clear_signal_queue():
     """Clear the signal queue after analysis completes."""
     global _signal_queue
     _signal_queue = None
+
+
+# Module-level storage for scanner config
+_scanner_config: Optional[ScannerConfig] = None
+
+
+def set_scanner_config(config: ScannerConfig):
+    """Set scanner config for web search URL."""
+    global _scanner_config
+    _scanner_config = config
+
+
+def get_web_search_url() -> str:
+    """Get web search MCP URL from config or default."""
+    if _scanner_config:
+        return _scanner_config.web_search_mcp_url
+    return "http://localhost:3000/mcp"
+
+
+def get_web_search_timeout() -> int:
+    """Get web search timeout from config or default."""
+    if _scanner_config:
+        return _scanner_config.web_search_timeout_seconds
+    return 30
 
 
 @tool(
@@ -441,68 +469,225 @@ async def generate_sentiment_query_internal(symbol: str, context: str = "") -> s
 
 
 async def execute_web_search_internal(query: str) -> List[Dict[str, str]]:
-    """Internal function to execute web search via MCP."""
-    # This will be called via the MCP server, but for now we'll simulate
-    # In actual implementation, this calls the web-search MCP tool
-    # For testing, we return empty list as fallback
-    return []
+    """Internal function to execute web search via MCP.
 
+    Calls the web-search MCP HTTP endpoint using aiohttp.
 
-def analyze_sentiment_from_results(web_results: List[Dict[str, str]]) -> tuple[str, int]:
-    """
-    Analyze web results to generate summary and suggest sentiment score.
+    Args:
+        query: Search query string
 
     Returns:
-        (summary, suggested_score) where score is 0-30
+        List of search results with keys: title, snippet, url
+
+    Raises:
+        RuntimeError: On connection error, timeout, or empty results
     """
-    if not web_results:
-        return "No web results available for sentiment analysis", 15
+    url = get_web_search_url()
+    timeout_seconds = get_web_search_timeout()
 
-    # Simple heuristic: count positive/negative keywords
-    positive_keywords = ["approval", "approved", "bullish", "surge", "rally", "institutional",
-                        "adoption", "demand", "breakthrough", "upgrade"]
-    negative_keywords = ["crash", "bearish", "decline", "concern", "risk", "regulation",
-                        "ban", "hack", "fraud", "lawsuit"]
+    # Build MCP request payload
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "search",
+            "arguments": {
+                "query": query,
+                "engines": ["duckduckgo", "bing"],
+                "limit": 10
+            }
+        }
+    }
 
-    positive_count = 0
-    negative_count = 0
+    try:
+        timeout = aiohttp.ClientTimeout(total=timeout_seconds)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, json=payload) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"Web search HTTP error: status={response.status}")
 
-    for result in web_results:
-        text = f"{result.get('title', '')} {result.get('snippet', '')}".lower()
-        positive_count += sum(1 for kw in positive_keywords if kw in text)
-        negative_count += sum(1 for kw in negative_keywords if kw in text)
+                data = await response.json()
 
-    # Generate summary
-    if positive_count > negative_count * 1.5:
-        summary = f"Positive sentiment detected. Catalysts found: {positive_count} positive signals vs {negative_count} negative."
-        score = min(30, 15 + positive_count * 2)
-    elif negative_count > positive_count * 1.5:
-        summary = f"Negative sentiment detected. Risks found: {negative_count} negative signals vs {positive_count} positive."
-        score = max(0, 15 - negative_count * 2)
-    else:
-        summary = f"Neutral sentiment. Mixed signals: {positive_count} positive, {negative_count} negative."
-        score = 15
+                # Check for JSON-RPC error
+                if "error" in data:
+                    error_msg = data["error"].get("message", "Unknown error")
+                    raise RuntimeError(f"Web search RPC error: {error_msg}")
 
-    return summary, score
+                # Extract results from response
+                if "result" not in data:
+                    raise RuntimeError("Web search response missing 'result' field")
+
+                result = data["result"]
+
+                # Result contains content array with text field containing JSON
+                if "content" not in result or not result["content"]:
+                    raise RuntimeError("Web search response missing 'content' field")
+
+                content_text = result["content"][0].get("text", "{}")
+                results_data = json.loads(content_text)
+
+                # Extract results array
+                results = results_data.get("results", [])
+
+                if not results:
+                    raise RuntimeError("Web search returned empty results")
+
+                # Normalize result format: title, snippet, url
+                normalized_results = []
+                for item in results:
+                    normalized_results.append({
+                        "title": item.get("title", ""),
+                        "snippet": item.get("description", item.get("snippet", "")),
+                        "url": item.get("url", "")
+                    })
+
+                return normalized_results
+
+    except aiohttp.ClientError as e:
+        raise RuntimeError(f"Web search connection error: {e}")
+    except asyncio.TimeoutError:
+        raise RuntimeError(f"Web search timeout after {timeout_seconds}s")
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Web search JSON parse error: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Web search failed: {e}")
+
+
+async def analyze_sentiment_with_llm(
+    symbol: str,
+    web_results: List[Dict[str, str]],
+    context: str = ""
+) -> Dict[str, Any]:
+    """
+    Analyze sentiment from web results using Claude.
+
+    Args:
+        symbol: Trading symbol (e.g., "BTCUSDT")
+        web_results: List of web search results with title, snippet, url
+        context: Optional context about the price move
+
+    Returns:
+        Dict with sentiment_summary (str), sentiment_score (0-30), key_findings (list)
+
+    Raises:
+        RuntimeError: If Claude API call fails or response cannot be parsed
+    """
+    # Format web results for Claude
+    results_text = "\n\n".join([
+        f"Title: {r.get('title', 'N/A')}\nSnippet: {r.get('snippet', 'N/A')}\nURL: {r.get('url', 'N/A')}"
+        for r in web_results[:10]  # Limit to top 10 results
+    ])
+
+    # Build analysis prompt
+    prompt = f"""Analyze the sentiment for {symbol} based on these recent web search results:
+
+{results_text}
+
+{f'Context: {context}' if context else ''}
+
+Provide a JSON response with:
+1. sentiment_summary: A 2-3 sentence summary of the overall sentiment
+2. sentiment_score: A score from 0-30 where:
+   - 0 = Extremely bearish (major negative catalysts, fear)
+   - 15 = Neutral (mixed signals or no strong catalysts)
+   - 30 = Extremely bullish (major positive catalysts, euphoria)
+3. key_findings: A list of exactly 3 key findings that justify the score
+
+Return ONLY valid JSON, no other text."""
+
+    try:
+        # Get API key from environment
+        import os
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY not found in environment. "
+                "Please set it in your .env file or export it: "
+                "export ANTHROPIC_API_KEY='your-key-here'"
+            )
+
+        # Make async Claude API call
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+
+        response = await client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1000,
+            messages=[{
+                "role": "user",
+                "content": prompt
+            }]
+        )
+
+        # Extract text from response
+        if not response.content or len(response.content) == 0:
+            raise RuntimeError("Empty response from Claude API")
+
+        response_text = response.content[0].text
+
+        # Parse JSON response
+        try:
+            result = json.loads(response_text)
+        except json.JSONDecodeError:
+            # Try to extract JSON if wrapped in markdown code blocks
+            if "```json" in response_text:
+                json_start = response_text.find("```json") + 7
+                json_end = response_text.find("```", json_start)
+                result = json.loads(response_text[json_start:json_end].strip())
+            elif "```" in response_text:
+                json_start = response_text.find("```") + 3
+                json_end = response_text.find("```", json_start)
+                result = json.loads(response_text[json_start:json_end].strip())
+            else:
+                raise
+
+        # Validate required fields
+        if "sentiment_summary" not in result:
+            raise RuntimeError("Response missing 'sentiment_summary' field")
+        if "sentiment_score" not in result:
+            raise RuntimeError("Response missing 'sentiment_score' field")
+        if "key_findings" not in result:
+            raise RuntimeError("Response missing 'key_findings' field")
+
+        # Clamp score to 0-30 range
+        score = result["sentiment_score"]
+        if not isinstance(score, (int, float)):
+            raise RuntimeError(f"sentiment_score must be numeric, got {type(score)}")
+
+        score = max(0, min(30, int(score)))
+        result["sentiment_score"] = score
+
+        # Ensure key_findings is a list
+        if not isinstance(result["key_findings"], list):
+            raise RuntimeError("key_findings must be a list")
+
+        return result
+
+    except anthropic.APIError as e:
+        raise RuntimeError(f"Claude API error: {e}")
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Failed to parse Claude response as JSON: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Sentiment analysis failed: {e}")
 
 
 @tool(
     name="fetch_sentiment_data",
     description="""
-    Generate a sentiment analysis query for a trading symbol.
+    Fetch and analyze market sentiment for a trading symbol.
 
-    Returns a well-structured search query that Claude Code should use with the WebSearch tool
-    to gather market sentiment, news, and catalysts.
+    Executes web search for recent news and uses LLM to analyze sentiment.
+    Returns sentiment score (0-30) and summary.
 
-    NOTE: This tool does NOT execute web search. Web search must be done by Claude Code
-    using the WebSearch tool with the returned query.
+    IMPORTANT: This tool will FAIL if web search is unavailable.
+    The scanner will skip analysis for this symbol if sentiment cannot be determined.
 
     Args:
         symbol: Trading pair (e.g., "BTCUSDT")
         context: Optional context about the move (e.g., "5% up in last hour")
 
     Returns:
-        JSON with sentiment_query and instructions for Claude to execute WebSearch
+        JSON with web_results, sentiment_summary, sentiment_score (0-30), key_findings
     """,
     input_schema={
         "symbol": str,
@@ -510,25 +695,41 @@ def analyze_sentiment_from_results(web_results: List[Dict[str, str]]) -> tuple[s
     }
 )
 async def fetch_sentiment_data(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate sentiment query for Claude to use with WebSearch tool."""
+    """Fetch and analyze sentiment data using web search + LLM."""
     symbol = args.get("symbol", "")
     context = args.get("context", "")
-    warnings: List[str] = []
 
-    # Generate sentiment query
+    # Step 1: Generate search query
     try:
         sentiment_query = await generate_sentiment_query_internal(symbol, context)
+        logger.info(f"Generated sentiment query: {sentiment_query}")
     except Exception as e:
-        warnings.append(f"Sentiment query generation failed: {e}")
-        sentiment_query = f"{symbol} cryptocurrency news sentiment analysis recent"
+        logger.error(f"Failed to generate sentiment query: {e}")
+        raise RuntimeError(f"Sentiment query generation failed: {e}")
 
-    # Build response with instructions
+    # Step 2: Execute web search (WILL RAISE if fails)
+    try:
+        web_results = await execute_web_search_internal(sentiment_query)
+        logger.info(f"Web search returned {len(web_results)} results")
+    except RuntimeError as e:
+        logger.error(f"Web search failed: {e}")
+        raise RuntimeError(f"Web search failed for {symbol}: {e}")
+
+    # Step 3: Analyze sentiment with LLM (WILL RAISE if fails)
+    try:
+        sentiment_analysis = await analyze_sentiment_with_llm(symbol, web_results, context)
+        logger.info(f"Sentiment analysis complete: score={sentiment_analysis['sentiment_score']}")
+    except RuntimeError as e:
+        logger.error(f"Sentiment analysis failed: {e}")
+        raise RuntimeError(f"Sentiment analysis failed for {symbol}: {e}")
+
+    # Build successful response
     response_data = {
         "sentiment_query": sentiment_query,
-        "web_results": [],
-        "sentiment_summary": "No web results available for sentiment analysis",
-        "suggested_sentiment_score": 15,
-        "warnings": warnings,
+        "web_results": web_results,
+        "sentiment_summary": sentiment_analysis["sentiment_summary"],
+        "sentiment_score": sentiment_analysis["sentiment_score"],
+        "key_findings": sentiment_analysis.get("key_findings", []),
         "success": True
     }
 

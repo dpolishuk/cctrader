@@ -17,6 +17,10 @@ class ScannerConfig:
     agent_timeout_seconds: int = field(default_factory=lambda: int(os.getenv('AGENT_TIMEOUT', '120')))
     max_search_queries_per_cycle: int = 20
 
+    # Web search configuration
+    web_search_mcp_url: str = field(default_factory=lambda: os.getenv('WEB_SEARCH_MCP_URL', 'http://localhost:3000/mcp'))
+    web_search_timeout_seconds: int = field(default_factory=lambda: int(os.getenv('WEB_SEARCH_TIMEOUT', '30')))
+
     # Position management
     monitoring_interval_seconds: int = field(default_factory=lambda: int(os.getenv('MONITORING_INTERVAL', '300')))
     reanalysis_interval_seconds: int = 900

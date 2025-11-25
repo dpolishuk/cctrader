@@ -159,12 +159,19 @@ async def test_fetch_sentiment_data_success():
         {"title": "BTC ETF Approved", "snippet": "SEC approves...", "url": "https://..."},
         {"title": "Institutional Demand", "snippet": "Major funds...", "url": "https://..."}
     ]
+    mock_sentiment_analysis = {
+        "sentiment_summary": "Bullish sentiment due to ETF approval and institutional demand.",
+        "sentiment_score": 25,
+        "key_findings": ["ETF approved", "Institutional interest", "Positive momentum"]
+    }
 
     with patch('src.agent.scanner.tools.generate_sentiment_query_internal') as mock_query_fn, \
-         patch('src.agent.scanner.tools.execute_web_search_internal') as mock_search:
+         patch('src.agent.scanner.tools.execute_web_search_internal') as mock_search, \
+         patch('src.agent.scanner.tools.analyze_sentiment_with_llm') as mock_llm:
 
         mock_query_fn.return_value = mock_query
         mock_search.return_value = mock_web_results
+        mock_llm.return_value = mock_sentiment_analysis
 
         result = await fetch_sentiment_data.handler({"symbol": "BTCUSDT", "context": "5% up"})
 
@@ -181,44 +188,33 @@ async def test_fetch_sentiment_data_success():
         assert "sentiment_summary" in data
         assert len(data["sentiment_summary"]) > 0
 
-        # Verify sentiment score suggested
-        assert "suggested_sentiment_score" in data
-        assert 0 <= data["suggested_sentiment_score"] <= 30
+        # Verify sentiment score (new field name)
+        assert "sentiment_score" in data
+        assert 0 <= data["sentiment_score"] <= 30
 
-        # Verify no warnings
-        assert data["warnings"] == []
+        # Verify key findings
+        assert "key_findings" in data
+        assert len(data["key_findings"]) > 0
+
+        # Verify success
         assert data["success"] is True
 
 
 @pytest.mark.asyncio
 async def test_fetch_sentiment_data_web_search_failure():
-    """Test fetch_sentiment_data with web search failure."""
+    """Test fetch_sentiment_data with web search failure raises RuntimeError."""
     mock_query = "Bitcoin BTC price analysis catalysts"
 
     with patch('src.agent.scanner.tools.generate_sentiment_query_internal') as mock_query_fn, \
          patch('src.agent.scanner.tools.execute_web_search_internal') as mock_search:
 
         mock_query_fn.return_value = mock_query
-        mock_search.side_effect = Exception("Web search API error")
+        mock_search.side_effect = RuntimeError("Web search API error")
 
-        result = await fetch_sentiment_data.handler({"symbol": "BTCUSDT", "context": "5% up"})
+        # New behavior: raises RuntimeError instead of returning with warnings
+        with pytest.raises(RuntimeError) as exc_info:
+            await fetch_sentiment_data.handler({"symbol": "BTCUSDT", "context": "5% up"})
 
-        import json
-        data = json.loads(result["content"][0]["text"])
-
-        # Verify query still generated
-        assert data["sentiment_query"] == mock_query
-
-        # Verify web results empty due to failure
-        assert data["web_results"] == []
-
-        # Verify warning generated
-        assert len(data["warnings"]) == 1
-        assert "Web search failed" in data["warnings"][0]
-
-        # Verify success is False
-        assert data["success"] is False
-
-        # Verify neutral sentiment score (15/30) when no results
-        assert data["suggested_sentiment_score"] == 15
-        assert "No web results" in data["sentiment_summary"]
+        # Verify error message contains symbol and original error
+        assert "BTCUSDT" in str(exc_info.value)
+        assert "Web search" in str(exc_info.value)
