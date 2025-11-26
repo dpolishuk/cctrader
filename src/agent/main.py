@@ -321,11 +321,27 @@ def scan_movers(interval, portfolio, daily, dashboard):
         from src.agent.config import config
         import aiosqlite
 
-        # Setup logging
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        # Setup logging - use RichHandler when dashboard enabled to avoid display corruption
+        if dashboard:
+            from rich.logging import RichHandler
+            # Remove any existing handlers
+            logging.root.handlers = []
+            # Use RichHandler that coordinates with Rich's Live display
+            rich_handler = RichHandler(
+                console=console,
+                show_time=True,
+                show_path=False,
+                markup=True,
+                rich_tracebacks=True,
+            )
+            rich_handler.setFormatter(logging.Formatter("%(message)s"))
+            logging.root.addHandler(rich_handler)
+            logging.root.setLevel(logging.INFO)
+        else:
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
 
         console.print("[bold green]🚀 Starting Market Movers Scanner[/bold green]")
         console.print(f"Scan interval: {interval}s")
@@ -537,7 +553,8 @@ Speed target: Complete analysis in under 30 seconds.""",
         event_callback = None
         if dashboard:
             from src.agent.scanner.dashboard import ScannerDashboard, ScannerEvent
-            scanner_dashboard = ScannerDashboard()
+            # Pass shared console for RichHandler coordination
+            scanner_dashboard = ScannerDashboard(console=console)
             scanner_dashboard.session_id = session_manager.get_session_id(SessionManager.SCANNER)
 
             def event_callback(event_type: str, data: dict):

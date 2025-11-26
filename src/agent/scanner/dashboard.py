@@ -55,13 +55,19 @@ class CycleState:
 class ScannerDashboard:
     """Dashboard for visualizing scanner cycles and mover analysis."""
 
-    def __init__(self, max_history: int = 5, enable_log_capture: bool = True):
+    def __init__(
+        self,
+        max_history: int = 5,
+        enable_log_capture: bool = True,
+        console: Optional[Console] = None,
+    ):
         """
         Initialize scanner dashboard.
 
         Args:
             max_history: Maximum number of cycles to keep in history.
             enable_log_capture: Whether to capture logs for split-screen display.
+            console: Rich Console instance to use. If None, creates a new one.
         """
         self.current_cycle: Optional[CycleState] = None
         self.history: List[CycleState] = []
@@ -70,7 +76,7 @@ class ScannerDashboard:
         self.stats: Dict[str, Any] = {}
         self._live: Optional[Live] = None
         self.session_id: Optional[str] = None
-        self.console = Console()
+        self.console = console or Console()
 
         # Split screen manager for log capture
         self.enable_log_capture = enable_log_capture
