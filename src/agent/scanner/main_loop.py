@@ -233,11 +233,22 @@ class MarketMoversScanner:
                 # Emit mover start event
                 self._emit_event(ScannerEvent.MOVER_START, symbol=symbol)
 
-                signal, sentiment_findings = await self._analyze_mover_with_agent(mover)
+                signal, sentiment_findings, analysis_data = await self._analyze_mover_with_agent(mover)
 
                 # Store sentiment findings for summary
                 if sentiment_findings:
                     sentiment_summary[symbol] = sentiment_findings
+
+                # Extract key findings for dashboard display (top 3)
+                key_findings = []
+                if sentiment_findings:
+                    for finding in sentiment_findings:
+                        if isinstance(finding, dict) and 'key_findings' in finding:
+                            key_findings = finding['key_findings'][:3]
+                            break
+                        elif isinstance(finding, dict) and 'bullet_points' in finding:
+                            key_findings = finding['bullet_points'][:3]
+                            break
 
                 if signal is None:
                     # Agent didn't generate a signal (low confidence or error)
@@ -245,6 +256,10 @@ class MarketMoversScanner:
                         ScannerEvent.MOVER_COMPLETE,
                         symbol=symbol,
                         result="NO_TRADE",
+                        confidence=analysis_data.get('confidence'),
+                        score_breakdown=analysis_data.get('score_breakdown'),
+                        weak_components=analysis_data.get('weak_components'),
+                        sentiment_findings=key_findings,
                     )
                     continue
 
@@ -273,6 +288,8 @@ class MarketMoversScanner:
                         result="EXECUTED",
                         confidence=signal.get('confidence'),
                         entry_price=signal.get('entry_price'),
+                        score_breakdown=analysis_data.get('score_breakdown'),
+                        sentiment_findings=key_findings,
                     )
                 else:
                     # Save rejection
@@ -283,6 +300,9 @@ class MarketMoversScanner:
                         symbol=symbol,
                         result="REJECTED",
                         confidence=signal.get('confidence'),
+                        score_breakdown=analysis_data.get('score_breakdown'),
+                        weak_components=analysis_data.get('weak_components'),
+                        sentiment_findings=key_findings,
                     )
 
             except Exception as e:
@@ -369,7 +389,9 @@ class MarketMoversScanner:
         filtered.sort(key=lambda x: x['max_change'], reverse=True)
         return filtered[:self.config.max_movers_per_scan]
 
-    async def _analyze_mover_with_agent(self, mover: Dict[str, Any]) -> tuple[Optional[Dict[str, Any]], list]:
+    async def _analyze_mover_with_agent(
+        self, mover: Dict[str, Any]
+    ) -> tuple[Optional[Dict[str, Any]], list, Dict[str, Any]]:
         """
         Invoke Claude Agent to analyze a mover.
 
@@ -377,7 +399,10 @@ class MarketMoversScanner:
             mover: Mover context (symbol, direction, changes, price, volume)
 
         Returns:
-            Tuple of (Signal dict if confidence >= 60 else None, sentiment_findings list)
+            Tuple of:
+            - Signal dict if confidence >= 60, else None
+            - sentiment_findings list (key findings from news)
+            - analysis_data dict with score breakdown (always returned)
         """
         symbol = mover['symbol']
         logger.info(f"\n🤖 Analyzing {symbol} ({mover['direction']}) {mover['change_1h']:+.2f}% (1h)")
@@ -417,8 +442,26 @@ class MarketMoversScanner:
             # Get sentiment findings from agent
             sentiment_findings = self.agent.get_sentiment_findings() if hasattr(self.agent, 'get_sentiment_findings') else []
 
-            # Extract confidence
+            # Extract confidence and scores
             confidence = response.get('confidence', 0)
+            technical_score = response.get('technical_score', 0.0)
+            sentiment_score = response.get('sentiment_score', 0.0)
+            liquidity_score = response.get('liquidity_score', 0.0)
+            correlation_score = response.get('correlation_score', 0.0)
+
+            # Build analysis data (always returned for transparency)
+            analysis_data = {
+                'confidence': confidence,
+                'score_breakdown': {
+                    'technical': technical_score,
+                    'sentiment': sentiment_score,
+                    'liquidity': liquidity_score,
+                    'correlation': correlation_score,
+                },
+                'weak_components': self._get_weak_components(
+                    technical_score, sentiment_score, liquidity_score, correlation_score
+                ),
+            }
 
             if confidence < self.config.min_confidence:
                 logger.info(f"❌ Rejected - Confidence: {confidence}/100 (below threshold)")
@@ -430,7 +473,7 @@ class MarketMoversScanner:
                     reason='CONFIDENCE_BELOW_THRESHOLD',
                     details=f"Confidence {confidence} < {self.config.min_confidence}"
                 )
-                return None, sentiment_findings
+                return None, sentiment_findings, analysis_data
 
             # Build signal dict
             signal = {
@@ -440,19 +483,19 @@ class MarketMoversScanner:
                 'entry_price': response.get('entry_price', mover['current_price']),
                 'stop_loss': response.get('stop_loss'),
                 'tp1': response.get('tp1'),
-                'technical_score': response.get('technical_score', 0.0),
-                'sentiment_score': response.get('sentiment_score', 0.0),
-                'liquidity_score': response.get('liquidity_score', 0.0),
-                'correlation_score': response.get('correlation_score', 0.0),
+                'technical_score': technical_score,
+                'sentiment_score': sentiment_score,
+                'liquidity_score': liquidity_score,
+                'correlation_score': correlation_score,
                 'analysis': response.get('analysis', ''),
             }
 
             logger.info(f"✅ Signal generated - Confidence: {confidence}/100")
-            return signal, sentiment_findings
+            return signal, sentiment_findings, analysis_data
 
         except Exception as e:
             logger.error(f"❌ Agent analysis failed: {e}", exc_info=True)
-            return None, []
+            return None, [], {}
 
     async def _execute_signal(self, signal: Dict[str, Any]):
         """
@@ -525,6 +568,37 @@ class MarketMoversScanner:
         else:
             logger.warning(f"⚠ Trade execution issue: {result.get('reason', 'Unknown')}")
             logger.info(f"Signal saved as ID: {signal_id}\n")
+
+    def _get_weak_components(
+        self,
+        technical: float,
+        sentiment: float,
+        liquidity: float,
+        correlation: float,
+    ) -> List[str]:
+        """
+        Identify scoring components that are below their threshold (60% of max).
+
+        Args:
+            technical: Technical score (0-40)
+            sentiment: Sentiment score (0-30)
+            liquidity: Liquidity score (0-20)
+            correlation: Correlation score (0-10)
+
+        Returns:
+            List of component names that are below threshold
+        """
+        weak = []
+        # Thresholds are 60% of max for each component
+        if technical < 24:  # 60% of 40
+            weak.append("technical")
+        if sentiment < 18:  # 60% of 30
+            weak.append("sentiment")
+        if liquidity < 12:  # 60% of 20
+            weak.append("liquidity")
+        if correlation < 6:  # 60% of 10
+            weak.append("correlation")
+        return weak
 
     async def _save_rejection(self, signal: Dict[str, Any], reason: str):
         """

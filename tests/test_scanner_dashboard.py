@@ -305,3 +305,68 @@ class TestScannerDashboard:
         result = dashboard.render()
         # Should return a Rich Layout or similar renderable object
         assert result is not None
+
+    def test_complete_mover_with_expanded_details(self):
+        """Test completing a mover with score breakdown and sentiment findings."""
+        dashboard = ScannerDashboard()
+        dashboard.start_cycle(
+            cycle_number=1,
+            movers=[{"symbol": "BTCUSDT", "change_pct": 7.2, "direction": "gainer"}],
+        )
+
+        # Complete with expanded details for NO_TRADE
+        dashboard.complete_mover(
+            symbol="BTCUSDT",
+            result="NO_TRADE",
+            confidence=42,
+            score_breakdown={
+                "technical": 18,
+                "sentiment": 8,
+                "liquidity": 12,
+                "correlation": 4,
+            },
+            weak_components=["technical", "sentiment"],
+            sentiment_findings=[
+                "No significant catalyst found",
+                "Volume declining over 24h",
+                "Mixed social sentiment",
+            ],
+        )
+
+        mover = dashboard.current_cycle.movers[0]
+        assert mover.result == "NO_TRADE"
+        assert mover.confidence == 42
+        assert mover.score_breakdown["technical"] == 18
+        assert mover.score_breakdown["sentiment"] == 8
+        assert "technical" in mover.weak_components
+        assert "sentiment" in mover.weak_components
+        assert len(mover.sentiment_findings) == 3
+
+    def test_handle_event_mover_complete_with_expanded_details(self):
+        """Test handling mover_complete event with expanded analysis data."""
+        dashboard = ScannerDashboard()
+        dashboard.start_cycle(1, [{"symbol": "ETHUSDT", "change_pct": 5.5, "direction": "gainer"}])
+
+        # Handle MOVER_COMPLETE with expanded details
+        dashboard.handle_event(
+            ScannerEvent.MOVER_COMPLETE,
+            symbol="ETHUSDT",
+            result="NO_TRADE",
+            confidence=38,
+            score_breakdown={
+                "technical": 22,
+                "sentiment": 5,
+                "liquidity": 8,
+                "correlation": 3,
+            },
+            weak_components=["sentiment", "liquidity", "correlation"],
+            sentiment_findings=["Bearish news flow detected"],
+        )
+
+        mover = dashboard.current_cycle.movers[0]
+        assert mover.result == "NO_TRADE"
+        assert mover.confidence == 38
+        assert mover.score_breakdown is not None
+        assert mover.score_breakdown["sentiment"] == 5
+        assert "liquidity" in mover.weak_components
+        assert mover.sentiment_findings[0] == "Bearish news flow detected"

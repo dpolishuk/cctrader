@@ -39,6 +39,19 @@ class MoverStatus:
     result: Optional[str] = None  # "NO_TRADE", "EXECUTED", "REJECTED"
     confidence: Optional[int] = None
     entry_price: Optional[float] = None
+    # Analysis details for NO_TRADE transparency
+    score_breakdown: Optional[Dict[str, float]] = None  # technical, sentiment, liquidity, correlation
+    weak_components: Optional[List[str]] = None  # Components below threshold
+    sentiment_findings: Optional[List[str]] = None  # Top 3 key findings from news
+
+
+# Component score thresholds (60% of max for each)
+SCORE_THRESHOLDS = {
+    "technical": {"max": 40, "threshold": 24},
+    "sentiment": {"max": 30, "threshold": 18},
+    "liquidity": {"max": 20, "threshold": 12},
+    "correlation": {"max": 10, "threshold": 6},
+}
 
 
 @dataclass
@@ -142,6 +155,9 @@ class ScannerDashboard:
         result: str,
         confidence: Optional[int] = None,
         entry_price: Optional[float] = None,
+        score_breakdown: Optional[Dict[str, float]] = None,
+        weak_components: Optional[List[str]] = None,
+        sentiment_findings: Optional[List[str]] = None,
     ) -> None:
         """
         Mark a mover as complete.
@@ -151,6 +167,9 @@ class ScannerDashboard:
             result: Result string (NO_TRADE, EXECUTED, REJECTED).
             confidence: Final confidence score.
             entry_price: Entry price if executed.
+            score_breakdown: Dict with technical, sentiment, liquidity, correlation scores.
+            weak_components: List of component names that were below threshold.
+            sentiment_findings: Top 3 key findings from sentiment analysis.
         """
         if not self.current_cycle:
             return
@@ -163,6 +182,12 @@ class ScannerDashboard:
                     mover.confidence = confidence
                 if entry_price is not None:
                     mover.entry_price = entry_price
+                if score_breakdown is not None:
+                    mover.score_breakdown = score_breakdown
+                if weak_components is not None:
+                    mover.weak_components = weak_components
+                if sentiment_findings is not None:
+                    mover.sentiment_findings = sentiment_findings
                 break
 
     def complete_cycle(
@@ -262,6 +287,9 @@ class ScannerDashboard:
                 result=kwargs.get("result", "NO_TRADE"),
                 confidence=kwargs.get("confidence"),
                 entry_price=kwargs.get("entry_price"),
+                score_breakdown=kwargs.get("score_breakdown"),
+                weak_components=kwargs.get("weak_components"),
+                sentiment_findings=kwargs.get("sentiment_findings"),
             )
 
         elif event_type == ScannerEvent.CYCLE_COMPLETE:
@@ -327,7 +355,7 @@ class ScannerDashboard:
         return text
 
     def _render_mover_row(self, mover: MoverStatus) -> Text:
-        """Render a single mover row."""
+        """Render a single mover row with expanded details for completed analysis."""
         text = Text()
 
         # Direction icon
@@ -347,16 +375,52 @@ class ScannerDashboard:
         if mover.status == "complete":
             if mover.result == "EXECUTED":
                 text.append(f"{ICONS['complete']} EXECUTED", style=COLORS["success"])
+                if mover.confidence:
+                    text.append(f" ({mover.confidence}/100)", style="dim")
                 if mover.entry_price:
-                    text.append(f"    @ ${mover.entry_price:,.2f}", style="dim")
+                    text.append(f" @ ${mover.entry_price:,.2f}", style="dim")
             elif mover.result == "NO_TRADE":
                 text.append(f"{ICONS['complete']} NO_TRADE", style=COLORS["neutral"])
                 if mover.confidence:
-                    text.append(f"    ({mover.confidence} conf)", style="dim")
+                    text.append(f" ({mover.confidence}/100)", style="dim")
             elif mover.result == "REJECTED":
                 text.append(f"{ICONS['error']} REJECTED", style=COLORS["error"])
+                if mover.confidence:
+                    text.append(f" ({mover.confidence}/100)", style="dim")
             else:
                 text.append(f"{ICONS['complete']} {mover.result or 'DONE'}", style=COLORS["neutral"])
+
+            # Add expanded details for completed movers with analysis data
+            if mover.score_breakdown:
+                text.append("\n")
+                text.append("      Scores: ", style="dim")
+                scores = mover.score_breakdown
+                text.append(f"Tech {scores.get('technical', 0):.0f}/40", style="cyan")
+                text.append(" │ ", style="dim")
+                text.append(f"Sent {scores.get('sentiment', 0):.0f}/30", style="cyan")
+                text.append(" │ ", style="dim")
+                text.append(f"Liq {scores.get('liquidity', 0):.0f}/20", style="cyan")
+                text.append(" │ ", style="dim")
+                text.append(f"Corr {scores.get('correlation', 0):.0f}/10", style="cyan")
+
+            # Show weak components if any
+            if mover.weak_components:
+                text.append("\n")
+                text.append("      Weak:   ", style="dim")
+                weak_parts = []
+                for comp in mover.weak_components:
+                    threshold = SCORE_THRESHOLDS.get(comp, {}).get("threshold", 0)
+                    weak_parts.append(f"{comp.title()} (<{threshold})")
+                text.append(", ".join(weak_parts), style="yellow")
+
+            # Show sentiment findings if available
+            if mover.sentiment_findings:
+                text.append("\n")
+                text.append("      News:", style="dim")
+                for i, finding in enumerate(mover.sentiment_findings[:3]):
+                    text.append("\n")
+                    text.append(f"        • {finding}", style="dim white")
+
         elif mover.status == "analyzing":
             text.append(f"{ICONS['running']} Analysis", style=COLORS["running"])
             if mover.stage_detail:
