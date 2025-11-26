@@ -564,15 +564,23 @@ class ScannerDashboardContext:
 
     async def __aenter__(self) -> "ScannerDashboardContext":
         """Start live display and install log handler."""
-        # Install log handler to capture logs
-        self.dashboard.install_log_handler()
-
         self._live = Live(
             self.dashboard.render(),
             refresh_per_second=4,
             console=self.dashboard.console,
         )
         self.dashboard._live = self._live
+
+        # Set up log callback to trigger display refresh
+        if self.dashboard.split_screen:
+            def on_log_refresh():
+                if self.dashboard._live:
+                    self.dashboard._live.update(self.dashboard.render())
+            self.dashboard.split_screen.set_on_log_callback(on_log_refresh)
+
+        # Install log handler to capture logs
+        self.dashboard.install_log_handler()
+
         self._live.start()
         return self
 

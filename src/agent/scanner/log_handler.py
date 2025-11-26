@@ -3,7 +3,7 @@
 import logging
 from collections import deque
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Callable
 
 from rich.console import Console
 from rich.panel import Panel
@@ -47,16 +47,23 @@ class LogBuffer:
 class DashboardLogHandler(logging.Handler):
     """Custom logging handler that writes to a LogBuffer."""
 
-    def __init__(self, buffer: LogBuffer, level: int = logging.NOTSET):
+    def __init__(
+        self,
+        buffer: LogBuffer,
+        level: int = logging.NOTSET,
+        on_emit: Optional[Callable[[], None]] = None,
+    ):
         """
         Initialize the dashboard log handler.
 
         Args:
             buffer: LogBuffer to write to.
             level: Logging level.
+            on_emit: Optional callback called after each log is emitted.
         """
         super().__init__(level)
         self.buffer = buffer
+        self.on_emit = on_emit
 
     def emit(self, record: logging.LogRecord) -> None:
         """
@@ -68,6 +75,9 @@ class DashboardLogHandler(logging.Handler):
         try:
             msg = self.format(record)
             self.buffer.add(msg)
+            # Notify dashboard to refresh
+            if self.on_emit:
+                self.on_emit()
         except Exception:
             self.handleError(record)
 
@@ -88,6 +98,7 @@ class SplitScreenManager:
         self,
         max_log_lines: int = 500,
         log_display_lines: int = 10,
+        on_log: Optional[Callable[[], None]] = None,
     ):
         """
         Initialize split screen manager.
@@ -95,11 +106,20 @@ class SplitScreenManager:
         Args:
             max_log_lines: Maximum lines to buffer.
             log_display_lines: Lines to show in display.
+            on_log: Optional callback called when a log is added.
         """
         self.log_buffer = LogBuffer(max_lines=max_log_lines)
         self.log_display_lines = log_display_lines
         self._handler: Optional[DashboardLogHandler] = None
+        self.on_log = on_log
         self.console = Console()
+
+    def set_on_log_callback(self, callback: Callable[[], None]) -> None:
+        """Set callback to be called when logs are added."""
+        self.on_log = callback
+        # Update existing handler if already created
+        if self._handler:
+            self._handler.on_emit = callback
 
     def get_log_handler(self) -> DashboardLogHandler:
         """
@@ -109,7 +129,10 @@ class SplitScreenManager:
             DashboardLogHandler instance.
         """
         if self._handler is None:
-            self._handler = DashboardLogHandler(self.log_buffer)
+            self._handler = DashboardLogHandler(
+                self.log_buffer,
+                on_emit=self.on_log,
+            )
             self._handler.setFormatter(
                 logging.Formatter(
                     "%(asctime)s %(levelname)s %(message)s",
