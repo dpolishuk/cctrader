@@ -265,17 +265,21 @@ class ScannerDashboard:
                 trades_rejected=kwargs.get("trades_rejected", 0),
             )
 
-        # Refresh display if live
+        # Update display with fresh render if live
         if self._live:
-            self._live.refresh()
+            self._live.update(self.render())
 
     def update_portfolio(self, data: Dict[str, Any]) -> None:
         """Update portfolio display data."""
         self.portfolio = data
+        if self._live:
+            self._live.update(self.render())
 
     def update_stats(self, data: Dict[str, Any]) -> None:
         """Update stats display data."""
         self.stats = data
+        if self._live:
+            self._live.update(self.render())
 
     def _render_header(self) -> Panel:
         """Render the dashboard header."""
