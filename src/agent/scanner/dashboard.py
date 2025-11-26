@@ -311,12 +311,13 @@ class ScannerDashboard:
         # Build progress bar
         bar_width = 20
         filled = int((completed / total) * bar_width)
-        bar = "[green]" + ICONS["running"] * filled + "[/green]"
-        bar += "[dim]" + ICONS["pending"] * (bar_width - filled) + "[/dim]"
 
         text = Text()
         text.append("CYCLE PROGRESS ", style="bold white")
-        text.append(f"[{bar}] {completed}/{total}", style="white")
+        text.append("[", style="white")
+        text.append(ICONS["running"] * filled, style="green")
+        text.append(ICONS["pending"] * (bar_width - filled), style="dim")
+        text.append(f"] {completed}/{total}", style="white")
         return text
 
     def _render_mover_row(self, mover: MoverStatus) -> Text:
@@ -357,9 +358,10 @@ class ScannerDashboard:
                 phases = ["technical", "sentiment"]
                 if mover.stage_detail in phases:
                     idx = phases.index(mover.stage_detail)
-                    bar = "[green]" + ICONS["running"] * (idx + 1) + "[/green]"
-                    bar += "[dim]" + ICONS["pending"] * (len(phases) - idx - 1) + "[/dim]"
-                    text.append(f"    [{bar}] {mover.stage_detail}", style="dim cyan")
+                    text.append("    [", style="dim cyan")
+                    text.append(ICONS["running"] * (idx + 1), style="green")
+                    text.append(ICONS["pending"] * (len(phases) - idx - 1), style="dim")
+                    text.append(f"] {mover.stage_detail}", style="dim cyan")
         else:
             text.append(f"{ICONS['pending']} Pending", style=COLORS["pending"])
 
