@@ -91,11 +91,31 @@ class ScannerDashboard:
         self.session_id: Optional[str] = None
         self.console = console or Console()
 
+        # Throttling: limit updates to 4/sec to prevent flickering
+        self._last_update_time: float = 0.0
+        self._min_update_interval: float = 0.25  # 250ms
+
         # Split screen manager for log capture
         self.enable_log_capture = enable_log_capture
         self.split_screen: Optional[SplitScreenManager] = None
         if enable_log_capture:
             self.split_screen = SplitScreenManager(log_display_lines=8)
+
+    def _throttled_refresh(self, force: bool = False) -> None:
+        """
+        Update the live display with throttling to prevent flickering.
+
+        Args:
+            force: If True, bypass throttling and update immediately.
+        """
+        import time
+        if not self._live:
+            return
+
+        now = time.time()
+        if force or (now - self._last_update_time >= self._min_update_interval):
+            self._live.update(self.render())
+            self._last_update_time = now
 
     def start_cycle(self, cycle_number: int, movers: List[Dict[str, Any]]) -> None:
         """
@@ -299,21 +319,18 @@ class ScannerDashboard:
                 trades_rejected=kwargs.get("trades_rejected", 0),
             )
 
-        # Update display with fresh render if live
-        if self._live:
-            self._live.update(self.render())
+        # Update display with throttled refresh
+        self._throttled_refresh()
 
     def update_portfolio(self, data: Dict[str, Any]) -> None:
         """Update portfolio display data."""
         self.portfolio = data
-        if self._live:
-            self._live.update(self.render())
+        self._throttled_refresh()
 
     def update_stats(self, data: Dict[str, Any]) -> None:
         """Update stats display data."""
         self.stats = data
-        if self._live:
-            self._live.update(self.render())
+        self._throttled_refresh()
 
     def _render_header(self) -> Panel:
         """Render the dashboard header."""
@@ -640,15 +657,15 @@ class ScannerDashboardContext:
             self.dashboard.render(),
             refresh_per_second=4,
             console=self.dashboard.console,
+            screen=True,  # Use alternate screen buffer (htop-style)
         )
         self.dashboard._live = self._live
 
-        # Set up log callback to trigger display refresh
+        # Set up throttled log callback using dashboard's throttled refresh
         if self.dashboard.split_screen:
-            def on_log_refresh():
-                if self.dashboard._live:
-                    self.dashboard._live.update(self.dashboard.render())
-            self.dashboard.split_screen.set_on_log_callback(on_log_refresh)
+            self.dashboard.split_screen.set_on_log_callback(
+                self.dashboard._throttled_refresh
+            )
 
         # Install log handler to capture logs
         self.dashboard.install_log_handler()
