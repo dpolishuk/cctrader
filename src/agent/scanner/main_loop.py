@@ -475,14 +475,40 @@ class MarketMoversScanner:
                 )
                 return None, sentiment_findings, analysis_data
 
-            # Build signal dict
+            # Build signal dict with price fallbacks
+            # Use current_price if entry_price is 0 or missing
+            entry_price = response.get('entry_price') or 0
+            if entry_price <= 0:
+                entry_price = mover['current_price']
+                logger.info(f"Using current price as entry: ${entry_price:.2f}")
+
+            # Calculate stop_loss/tp1 fallbacks based on direction
+            # Default: 2% stop loss, 3% take profit
+            is_long = mover['direction'] == 'gainer'
+            stop_loss = response.get('stop_loss') or 0
+            tp1 = response.get('tp1') or 0
+
+            if stop_loss <= 0:
+                if is_long:
+                    stop_loss = entry_price * 0.98  # 2% below for long
+                else:
+                    stop_loss = entry_price * 1.02  # 2% above for short
+                logger.info(f"Calculated stop_loss: ${stop_loss:.2f}")
+
+            if tp1 <= 0:
+                if is_long:
+                    tp1 = entry_price * 1.03  # 3% above for long
+                else:
+                    tp1 = entry_price * 0.97  # 3% below for short
+                logger.info(f"Calculated tp1: ${tp1:.2f}")
+
             signal = {
                 'symbol': mover['symbol'],
                 'direction': mover['direction'],
                 'confidence': confidence,
-                'entry_price': response.get('entry_price', mover['current_price']),
-                'stop_loss': response.get('stop_loss'),
-                'tp1': response.get('tp1'),
+                'entry_price': entry_price,
+                'stop_loss': stop_loss,
+                'tp1': tp1,
                 'technical_score': technical_score,
                 'sentiment_score': sentiment_score,
                 'liquidity_score': liquidity_score,

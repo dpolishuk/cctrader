@@ -123,27 +123,14 @@ async def submit_trading_signal(args: Dict[str, Any]) -> Dict[str, Any]:
             'error': f'correlation_score must be 0-10, got {correlation_score}'
         }
 
-    # Validate prices are positive
+    # Validate prices - allow 0/missing for low-confidence signals (fallback applied later)
+    # Only warn, don't reject - main_loop will fill in current_price as fallback
     if entry_price <= 0:
-        logger.error(f"Invalid entry_price: {entry_price} (must be positive)")
-        return {
-            'status': 'error',
-            'error': f'entry_price must be positive, got {entry_price}'
-        }
-
+        logger.warning(f"Missing entry_price (got {entry_price}) - will use current price as fallback")
     if stop_loss <= 0:
-        logger.error(f"Invalid stop_loss: {stop_loss} (must be positive)")
-        return {
-            'status': 'error',
-            'error': f'stop_loss must be positive, got {stop_loss}'
-        }
-
+        logger.warning(f"Missing stop_loss (got {stop_loss}) - will calculate from entry price")
     if tp1 <= 0:
-        logger.error(f"Invalid tp1: {tp1} (must be positive)")
-        return {
-            'status': 'error',
-            'error': f'tp1 must be positive, got {tp1}'
-        }
+        logger.warning(f"Missing tp1 (got {tp1}) - will calculate from entry price")
 
     # Validate symbol is not empty (accept both BTCUSDT and BTC/USDT formats)
     if not symbol or len(symbol.strip()) == 0:
