@@ -309,7 +309,8 @@ def reset_breaker(portfolio):
 @click.option('--portfolio', default='Market Movers', help='Paper trading portfolio name')
 @click.option('--daily', is_flag=True, help='Maintain single session per day (all analyses in one conversation)')
 @click.option('--dashboard', is_flag=True, help='Enable visual dashboard for cycle monitoring')
-def scan_movers(interval, portfolio, daily, dashboard):
+@click.option('--no-sentiment', is_flag=True, help='Disable sentiment analysis (technical-only mode)')
+def scan_movers(interval, portfolio, daily, dashboard, no_sentiment):
     """Run market movers scanner - detects and analyzes 5%+ movers."""
     async def run_scanner():
         from src.agent.tools.market_data import get_exchange
@@ -381,7 +382,13 @@ def scan_movers(interval, portfolio, daily, dashboard):
         exchange = get_exchange()
 
         # Create agent wrapper
-        from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server
+        from claude_agent_sdk import (
+            ClaudeAgentOptions,
+            create_sdk_mcp_server,
+            PermissionResultAllow,
+            PermissionResultDeny,
+            ToolPermissionContext,
+        )
         from src.agent.scanner.agent_wrapper import AgentWrapper
         from src.agent.tools.market_data import fetch_market_data, get_current_price
         from src.agent.tools.technical_analysis import (
@@ -394,27 +401,54 @@ def scan_movers(interval, portfolio, daily, dashboard):
         )
         from src.agent.tools.sentiment import analyze_market_sentiment, detect_market_events
         from src.agent.scanner.tools import submit_trading_signal, fetch_technical_snapshot, fetch_sentiment_data
+        from src.agent.scanner.prompts import build_scanner_system_prompt
+        from src.agent.scanner.config import ScannerConfig
         from src.agent.tracking.token_tracker import TokenTracker
         from src.agent.database.token_schema import create_token_tracking_tables
         import aiosqlite
+
+        # Create scanner config with sentiment setting
+        use_sentiment = not no_sentiment
+        scanner_config = ScannerConfig(use_sentiment=use_sentiment)
+
+        # Build tools list conditionally based on sentiment flag
+        scanner_tools = [
+            fetch_technical_snapshot,
+            submit_trading_signal,
+            analyze_trend,
+            analyze_momentum,
+            analyze_volatility,
+            analyze_patterns,
+        ]
+        if use_sentiment:
+            scanner_tools.insert(1, fetch_sentiment_data)  # Add after fetch_technical_snapshot
 
         # Create MCP server with ONLY bundled tools for scanner agent
         # Individual tools removed to prevent timeout issues from sequential calls
         trading_tools_server = create_sdk_mcp_server(
             name="trading_tools",
             version="1.0.0",
-            tools=[
-                # Scanner bundled tools only
-                fetch_technical_snapshot,
-                fetch_sentiment_data,
-                submit_trading_signal,
-                # New technical analysis tools
-                analyze_trend,
-                analyze_momentum,
-                analyze_volatility,
-                analyze_patterns,
-            ]
+            tools=scanner_tools
         )
+
+        # Tool permission callback to block WebSearch when sentiment is disabled
+        async def can_use_tool_callback(
+            tool_name: str,
+            tool_input: dict,
+            context: ToolPermissionContext
+        ):
+            """Block web search tools when sentiment analysis is disabled."""
+            # Block WebSearch and related tools when sentiment is disabled
+            if not use_sentiment:
+                blocked_tools = ["WebSearch", "mcp__web-search__search", "web-search"]
+                if tool_name in blocked_tools or "web" in tool_name.lower() and "search" in tool_name.lower():
+                    return PermissionResultDeny(
+                        behavior="deny",
+                        message="WebSearch is disabled in technical-only mode (--no-sentiment)",
+                        interrupt=False
+                    )
+            # Allow everything else
+            return PermissionResultAllow(behavior="allow")
 
         agent_options = ClaudeAgentOptions(
             # MCP servers
@@ -423,17 +457,18 @@ def scan_movers(interval, portfolio, daily, dashboard):
                 # OpenWebSearch MCP is available via environment
             },
 
-            # Allowed tools - scanner uses only bundled tools
+            # Allowed tools - scanner uses only bundled tools (conditionally includes sentiment)
             allowed_tools=[
                 "mcp__trading__fetch_technical_snapshot",
-                "mcp__trading__fetch_sentiment_data",
                 "mcp__trading__submit_trading_signal",
                 "mcp__trading__analyze_trend",
                 "mcp__trading__analyze_momentum",
                 "mcp__trading__analyze_volatility",
                 "mcp__trading__analyze_patterns",
+            ] + ([
+                "mcp__trading__fetch_sentiment_data",
                 "mcp__web-search__search",  # Used internally by fetch_sentiment_data
-            ],
+            ] if use_sentiment else []),
 
             # ORIGINAL PROMPT (backup before optimization)
             # Removed 2025-11-19 due to timeout issues (sequential execution)
@@ -465,42 +500,8 @@ def scan_movers(interval, portfolio, daily, dashboard):
             # CRITICAL: Call submit_trading_signal() as your FINAL step with all analysis results.
             # This is REQUIRED - your analysis is not complete until you call this tool."""
 
-            # System prompt for scanner agent
-            system_prompt="""You are an expert cryptocurrency trading analysis agent for market movers scanning.
-
-Your mission: Analyze high-momentum market movers (5%+ moves) to identify high-probability trading opportunities.
-
-Analysis workflow:
-1. Gather ALL data first:
-   - fetch_technical_snapshot: Returns 15m/1h/4h data + current price in ONE call
-   - fetch_sentiment_data: Returns sentiment query + web search results in ONE call
-
-2. Calculate 4-component confidence score (0-100):
-   - Technical alignment: 0-40 points (15m/1h/4h alignment?)
-   - Sentiment: 0-30 points (catalysts from web results?)
-   - Liquidity: 0-20 points (volume quality from technical data?)
-   - Correlation: 0-10 points (BTC relationship?)
-
-3. IMMEDIATELY call submit_trading_signal() with all 10 parameters
-   - Include: confidence, entry_price, stop_loss, tp1, technical_score,
-     sentiment_score, liquidity_score, correlation_score, symbol, analysis
-   - Do NOT add extra reasoning after calculating confidence
-
-Scoring guidelines:
-- Only recommend trades with confidence ≥ 60
-- Be conservative - require alignment across ALL factors
-- Technical: Aligned trend across 15m/1h/4h timeframes
-- Sentiment: Clear catalysts from web results
-- Liquidity: Sufficient volume, no manipulation signs
-- Correlation: BTC relationship supports trade direction
-
-CRITICAL REQUIREMENTS:
-1. Each data tool should only be called ONCE
-2. If a tool returns warnings, use available data - do NOT retry
-3. You MUST call submit_trading_signal() as your FINAL step
-4. Your analysis is NOT complete until you call submit_trading_signal()
-
-Speed target: Complete analysis in under 30 seconds.""",
+            # System prompt for scanner agent (dynamic based on sentiment flag)
+            system_prompt=build_scanner_system_prompt(use_sentiment),
 
             # Model and limits
             model=config.CLAUDE_MODEL,
@@ -509,6 +510,9 @@ Speed target: Complete analysis in under 30 seconds.""",
 
             # Streaming
             include_partial_messages=True,
+
+            # Tool permission callback (blocks WebSearch when --no-sentiment)
+            can_use_tool=can_use_tool_callback,
         )
 
         # Initialize session manager for Claude Agent SDK sessions
@@ -554,7 +558,7 @@ Speed target: Complete analysis in under 30 seconds.""",
         if dashboard:
             from src.agent.scanner.dashboard import ScannerDashboard, ScannerEvent
             # Pass shared console for RichHandler coordination
-            scanner_dashboard = ScannerDashboard(console=console)
+            scanner_dashboard = ScannerDashboard(console=console, use_sentiment=use_sentiment)
             scanner_dashboard.session_id = session_manager.get_session_id(SessionManager.SCANNER)
 
             def event_callback(event_type: str, data: dict):
@@ -568,12 +572,14 @@ Speed target: Complete analysis in under 30 seconds.""",
 
             console.print("[green]✓[/green] Dashboard mode enabled")
 
-        # Create and start scanner
+        # Create and start scanner with config
+        scanner_config.scan_interval_seconds = interval  # Set interval before passing
         scanner = MarketMoversScanner(
             exchange=exchange,
             agent=agent,
             portfolio=manager,
             db=db,
+            config=scanner_config,  # Pass config with sentiment setting
             daily_mode=daily,  # Pass daily mode flag
             event_callback=event_callback,  # Pass dashboard callback
         )
@@ -582,12 +588,15 @@ Speed target: Complete analysis in under 30 seconds.""",
         from src.agent.scanner.tools import set_scanner_config
         set_scanner_config(scanner.config)
 
-        scanner.config.scan_interval_seconds = interval
-
         # Log daily mode status
         if daily:
             console.print("[green]✓[/green] Daily mode enabled - maintaining single session per day")
             console.print(f"[dim]  All symbol analyses will be in one continuous conversation[/dim]\n")
+
+        # Log sentiment mode status
+        if no_sentiment:
+            console.print("[yellow]⚠[/yellow] Sentiment analysis disabled - technical-only mode")
+            console.print(f"[dim]  Scoring: Technical (0-55), Liquidity (0-30), Correlation (0-15)[/dim]\n")
 
         console.print("[bold cyan]Scanner initialized. Press Ctrl+C to stop.[/bold cyan]")
 

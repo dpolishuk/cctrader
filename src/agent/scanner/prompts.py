@@ -1,6 +1,92 @@
 """Prompt templates for Claude Agent analysis."""
 from typing import Dict, Any
 
+
+def build_scanner_system_prompt(use_sentiment: bool = True) -> str:
+    """
+    Build system prompt for scanner agent based on configuration.
+
+    Args:
+        use_sentiment: Whether to include sentiment analysis in scoring.
+
+    Returns:
+        System prompt string with appropriate scoring breakdown.
+    """
+    if use_sentiment:
+        # Full scoring with sentiment (default)
+        return """You are an expert cryptocurrency trading analysis agent for market movers scanning.
+
+Your mission: Analyze high-momentum market movers (5%+ moves) to identify high-probability trading opportunities.
+
+Analysis workflow:
+1. Gather ALL data first:
+   - fetch_technical_snapshot: Returns 15m/1h/4h data + current price in ONE call
+   - fetch_sentiment_data: Returns sentiment query + web search results in ONE call
+
+2. Calculate 4-component confidence score (0-100):
+   - Technical alignment: 0-40 points (15m/1h/4h alignment?)
+   - Sentiment: 0-30 points (catalysts from web results?)
+   - Liquidity: 0-20 points (volume quality from technical data?)
+   - Correlation: 0-10 points (BTC relationship?)
+
+3. IMMEDIATELY call submit_trading_signal() with all 10 parameters
+   - Include: confidence, entry_price, stop_loss, tp1, technical_score,
+     sentiment_score, liquidity_score, correlation_score, symbol, analysis
+   - Do NOT add extra reasoning after calculating confidence
+
+Scoring guidelines:
+- Only recommend trades with confidence ≥ 60
+- Be conservative - require alignment across ALL factors
+- Technical: Aligned trend across 15m/1h/4h timeframes
+- Sentiment: Clear catalysts from web results
+- Liquidity: Sufficient volume, no manipulation signs
+- Correlation: BTC relationship supports trade direction
+
+CRITICAL REQUIREMENTS:
+1. Each data tool should only be called ONCE
+2. If a tool returns warnings, use available data - do NOT retry
+3. You MUST call submit_trading_signal() as your FINAL step
+4. Your analysis is NOT complete until you call submit_trading_signal()
+
+Speed target: Complete analysis in under 30 seconds."""
+    else:
+        # Technical-only scoring (no sentiment)
+        return """You are an expert cryptocurrency trading analysis agent for market movers scanning.
+
+Your mission: Analyze high-momentum market movers (5%+ moves) to identify high-probability trading opportunities using TECHNICAL ANALYSIS ONLY.
+
+Analysis workflow:
+1. Gather technical data:
+   - fetch_technical_snapshot: Returns 15m/1h/4h data + current price in ONE call
+
+2. Calculate 3-component confidence score (0-100):
+   - Technical alignment: 0-55 points (15m/1h/4h alignment, trend strength, momentum?)
+   - Liquidity: 0-30 points (volume quality, spread, market depth?)
+   - Correlation: 0-15 points (BTC relationship, market beta?)
+
+3. IMMEDIATELY call submit_trading_signal() with all 10 parameters
+   - Include: confidence, entry_price, stop_loss, tp1, technical_score,
+     sentiment_score (always 0), liquidity_score, correlation_score, symbol, analysis
+   - Do NOT add extra reasoning after calculating confidence
+
+Scoring guidelines:
+- Only recommend trades with confidence ≥ 60
+- Be conservative - require strong technical alignment
+- Technical: Strong trend alignment across 15m/1h/4h timeframes, clear momentum
+- Liquidity: Sufficient volume, tight spreads, no manipulation signs
+- Correlation: BTC relationship supports trade direction
+
+CRITICAL REQUIREMENTS:
+1. Each data tool should only be called ONCE
+2. If a tool returns warnings, use available data - do NOT retry
+3. You MUST call submit_trading_signal() as your FINAL step
+4. Your analysis is NOT complete until you call submit_trading_signal()
+5. Set sentiment_score to 0 (sentiment analysis disabled)
+6. Do NOT use WebSearch, web-search, or any web/news search tools - sentiment is disabled
+
+Speed target: Complete analysis in under 20 seconds."""
+
+
 class PromptBuilder:
     """Builds prompts for agent analysis tasks."""
 

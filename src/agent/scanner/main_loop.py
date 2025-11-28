@@ -606,24 +606,34 @@ class MarketMoversScanner:
         Identify scoring components that are below their threshold (60% of max).
 
         Args:
-            technical: Technical score (0-40)
-            sentiment: Sentiment score (0-30)
-            liquidity: Liquidity score (0-20)
-            correlation: Correlation score (0-10)
+            technical: Technical score (max depends on mode: 40 with sentiment, 55 without)
+            sentiment: Sentiment score (0-30, or 0 if sentiment disabled)
+            liquidity: Liquidity score (max depends on mode: 20 with sentiment, 30 without)
+            correlation: Correlation score (max depends on mode: 10 with sentiment, 15 without)
 
         Returns:
             List of component names that are below threshold
         """
         weak = []
-        # Thresholds are 60% of max for each component
-        if technical < 24:  # 60% of 40
-            weak.append("technical")
-        if sentiment < 18:  # 60% of 30
-            weak.append("sentiment")
-        if liquidity < 12:  # 60% of 20
-            weak.append("liquidity")
-        if correlation < 6:  # 60% of 10
-            weak.append("correlation")
+        if self.config.use_sentiment:
+            # Full scoring mode: Tech 0-40, Sent 0-30, Liq 0-20, Corr 0-10
+            if technical < 24:  # 60% of 40
+                weak.append("technical")
+            if sentiment < 18:  # 60% of 30
+                weak.append("sentiment")
+            if liquidity < 12:  # 60% of 20
+                weak.append("liquidity")
+            if correlation < 6:  # 60% of 10
+                weak.append("correlation")
+        else:
+            # Technical-only mode: Tech 0-55, Liq 0-30, Corr 0-15
+            if technical < 33:  # 60% of 55
+                weak.append("technical")
+            # sentiment is always 0 in no-sentiment mode, don't flag as weak
+            if liquidity < 18:  # 60% of 30
+                weak.append("liquidity")
+            if correlation < 9:  # 60% of 15
+                weak.append("correlation")
         return weak
 
     async def _save_rejection(self, signal: Dict[str, Any], reason: str):

@@ -53,6 +53,13 @@ SCORE_THRESHOLDS = {
     "correlation": {"max": 10, "threshold": 6},
 }
 
+# Thresholds when sentiment analysis is disabled (redistributed scoring)
+NO_SENTIMENT_THRESHOLDS = {
+    "technical": {"max": 55, "threshold": 33},
+    "liquidity": {"max": 30, "threshold": 18},
+    "correlation": {"max": 15, "threshold": 9},
+}
+
 
 @dataclass
 class CycleState:
@@ -73,6 +80,7 @@ class ScannerDashboard:
         max_history: int = 5,
         enable_log_capture: bool = True,
         console: Optional[Console] = None,
+        use_sentiment: bool = True,
     ):
         """
         Initialize scanner dashboard.
@@ -81,10 +89,14 @@ class ScannerDashboard:
             max_history: Maximum number of cycles to keep in history.
             enable_log_capture: Whether to capture logs for split-screen display.
             console: Rich Console instance to use. If None, creates a new one.
+            use_sentiment: Whether sentiment scoring is enabled.
         """
         self.current_cycle: Optional[CycleState] = None
         self.history: List[CycleState] = []
         self.max_history = max_history
+        self.use_sentiment = use_sentiment
+        # Select appropriate thresholds based on sentiment mode
+        self._thresholds = SCORE_THRESHOLDS if use_sentiment else NO_SENTIMENT_THRESHOLDS
         self.portfolio: Dict[str, Any] = {}
         self.stats: Dict[str, Any] = {}
         self._live: Optional[Live] = None
@@ -412,26 +424,34 @@ class ScannerDashboard:
                 text.append("\n")
                 text.append("      Scores: ", style="dim")
                 scores = mover.score_breakdown
-                text.append(f"Tech {scores.get('technical', 0):.0f}/40", style="cyan")
+                thresholds = self._thresholds
+                tech_max = thresholds.get("technical", {}).get("max", 40)
+                text.append(f"Tech {scores.get('technical', 0):.0f}/{tech_max}", style="cyan")
+                if self.use_sentiment:
+                    text.append(" │ ", style="dim")
+                    text.append(f"Sent {scores.get('sentiment', 0):.0f}/30", style="cyan")
                 text.append(" │ ", style="dim")
-                text.append(f"Sent {scores.get('sentiment', 0):.0f}/30", style="cyan")
+                liq_max = thresholds.get("liquidity", {}).get("max", 20)
+                text.append(f"Liq {scores.get('liquidity', 0):.0f}/{liq_max}", style="cyan")
                 text.append(" │ ", style="dim")
-                text.append(f"Liq {scores.get('liquidity', 0):.0f}/20", style="cyan")
-                text.append(" │ ", style="dim")
-                text.append(f"Corr {scores.get('correlation', 0):.0f}/10", style="cyan")
+                corr_max = thresholds.get("correlation", {}).get("max", 10)
+                text.append(f"Corr {scores.get('correlation', 0):.0f}/{corr_max}", style="cyan")
 
-            # Show weak components if any
-            if mover.weak_components:
+            # Show weak components if any (filter out sentiment if disabled)
+            weak_comps = mover.weak_components or []
+            if not self.use_sentiment:
+                weak_comps = [c for c in weak_comps if c != "sentiment"]
+            if weak_comps:
                 text.append("\n")
                 text.append("      Weak:   ", style="dim")
                 weak_parts = []
-                for comp in mover.weak_components:
-                    threshold = SCORE_THRESHOLDS.get(comp, {}).get("threshold", 0)
+                for comp in weak_comps:
+                    threshold = self._thresholds.get(comp, {}).get("threshold", 0)
                     weak_parts.append(f"{comp.title()} (<{threshold})")
                 text.append(", ".join(weak_parts), style="yellow")
 
-            # Show sentiment findings if available
-            if mover.sentiment_findings:
+            # Show sentiment findings if available (only when sentiment enabled)
+            if self.use_sentiment and mover.sentiment_findings:
                 text.append("\n")
                 text.append("      News:", style="dim")
                 for i, finding in enumerate(mover.sentiment_findings[:3]):
@@ -441,8 +461,8 @@ class ScannerDashboard:
         elif mover.status == "analyzing":
             text.append(f"{ICONS['running']} Analysis", style=COLORS["running"])
             if mover.stage_detail:
-                # Progress indicator for phase
-                phases = ["technical", "sentiment"]
+                # Progress indicator for phase (conditional phases based on sentiment mode)
+                phases = ["technical", "sentiment"] if self.use_sentiment else ["technical"]
                 if mover.stage_detail in phases:
                     idx = phases.index(mover.stage_detail)
                     text.append("    [", style="dim cyan")
