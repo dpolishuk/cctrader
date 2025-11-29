@@ -1,6 +1,8 @@
-# Bybit Trading Analysis Agent
+# CCTrader - Multi-Agent Cryptocurrency Trading Analysis System
 
-AI-powered cryptocurrency trading analysis agent using Anthropic's Claude Agent SDK, CCXT for Bybit integration, and Perplexity for market intelligence.
+![CCTrader Banner](assets/banner.png)
+
+AI-powered cryptocurrency trading analysis system using multiple specialized agents with Anthropic's Claude Agent SDK, CCXT for Bybit integration, and Perplexity for market intelligence.
 
 ## Features
 
