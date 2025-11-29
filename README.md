@@ -206,6 +206,8 @@ python scripts/init_token_tracking.py
 
 ## Architecture
 
+![CCTrader Architecture](assets/architecture.png)
+
 ### System Overview
 
 ```mermaid
